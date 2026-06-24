@@ -25,6 +25,12 @@ Produzir → decidir (expandir / reforçar / atacar / evoluir) → enviar frota 
 - **Caixa de seleção + clique** = multi-envio (abrir várias frentes).
 - **Clique** numa base = monta grupo de origem.
 
+### Profundidade F2 (implementada)
+- **Tipos de base** (cor+forma, zero asset): **escudo** absorve parte do dano (mais caro de tomar) · **veloz** lança frotas mais rápidas · **canhão** afina frotas inimigas que cruzam seu alcance. Sorteados no mapgen de forma espelhada; base central = fortaleza escudo. Canhão neutro atira nos dois lados (território perigoso de cercar).
+- **Modificadores de mapa:** zonas de **estrada** (acelera) e **lamaçal** (atrasa) a frota, espelhadas — geometria de rota mais rica.
+- **Névoa de guerra** (tecla `F`): você só enxerga a força de bases/frotas perto das suas; o resto fica oculto (`?`). Afeta só sua visão — a IA segue honesta.
+- **Cronômetro + placar:** relógio no HUD e pontuação (bases·tropas·tiers) no fim da partida.
+
 ## Tensões estratégicas (de onde vem a profundidade)
 
 | Tensão | Origem |
@@ -44,17 +50,19 @@ Gerado por partida, **espelhado por simetria de ponto** (partida justa): sua bas
 - Frota: **135 px/s** · Tick da IA: **0,7 s**.
 - Tiers — **T1**: prod 1,0/s, cap 30 · **T2**: 1,9/s, cap 58 · **T3**: 3,2/s, cap 95.
 - Custo de upgrade: **20 × tier**. Base inicial: **22 tropas**.
+- **F2 — tipos:** escudo dano ×0,6 · veloz ×1,6 · canhão alcance 110 / 6 dps. **Mapa:** estrada ×1,5 · lamaçal ×0,6. **Névoa:** raio 230. **Placar:** base×100 · tier×50.
 
-> **Tudo provisório.** Calibração é trabalho de playtest (humano) — ajustar `CFG`/`TIERS` em `game.js`.
+> **Tudo provisório.** Calibração é trabalho de playtest (humano) — ajustar os diais em `packages/shared` (`CFG`/`TIERS`/`BASE_KINDS`/`MAP_MODS`/…) ou em runtime no overlay (`O` + `Tab`/`-`/`=`).
 
-## Profundidade futura (priorizada, sem exigir arte)
+## Profundidade — status (F2 implementada)
 
-1. **Dificuldades de IA** (tick + agressividade + qualidade de alvo).
-2. **Névoa de guerra** (só enxerga perto das suas bases/frotas).
-3. **Tipos de base** (canhão = dano à distância · escudo = +defesa · veloz = frota mais rápida) — só cor/forma/ícone.
-4. **Cronômetro + pontuação** (modo "partida" com placar).
-5. **Modificadores de mapa** (estradas que aceleram, terreno que atrasa).
-6. **PvP** (servidor autoritativo) — fase posterior.
+1. ✅ **Dificuldades de IA** (tick + agressividade + qualidade de alvo).
+2. ✅ **Névoa de guerra** (só enxerga perto das suas bases/frotas; tecla `F`).
+3. ✅ **Tipos de base** (canhão = afina frotas no alcance · escudo = +defesa · veloz = frota mais rápida) — só cor/forma.
+4. ✅ **Cronômetro + pontuação** (placar no fim da partida).
+5. ✅ **Modificadores de mapa** (estradas que aceleram, lamaçal que atrasa).
+
+**A seguir:** calibração humana dos diais F2; IA evitar o alcance de canhões ao rotear (hoje entende escudo, mas não desvia de canhão); modo "tempo-limite"; **PvP** com servidor autoritativo reusando `packages/sim` (fase posterior).
 
 ## Não-mecânicas (cortes conscientes)
 

@@ -20,7 +20,7 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 
 ## Estado
 
-**Monorepo TypeScript jogável** (pnpm + Vite + TS strict): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado (partida justa), produção por *tier*, frotas com tempo de viagem, captura de bases, multi-seleção, **IA honesta com 3 dificuldades** + overlay de playtest. **Verificado:** typecheck 0 erros · **22 testes** (Vitest, golden replays) · build web ok. Graduado do protótipo single-file (F0→F1); falta playtest/balanceamento humano e deploy.
+**Monorepo TypeScript jogável e no ar** ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/)): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado, produção por *tier*, frotas com tempo de viagem, captura, multi-seleção, **IA honesta com 3 dificuldades**. **F2 (profundidade):** tipos de base (escudo/veloz/canhão), modificadores de mapa (estrada/lamaçal), névoa de guerra (`F`) e cronômetro+placar. **Verificado:** typecheck 0 erros · **41 testes** (Vitest, golden replays) · build + deploy (GitHub Pages) ok. Falta calibração humana dos diais F2.
 
 ## Rodando
 
@@ -38,6 +38,7 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 | **Espaço** | Pausa |
 | **R** / **Shift+R** | Nova partida (nova seed) / mesma seed (replay) |
 | **G** | Cicla a dificuldade da IA (fácil / normal / difícil) |
+| **F** | Liga/desliga a névoa de guerra |
 | **O** · **Tab** · **− / =** | Overlay de debug · seleciona dial · ajusta o dial (playtest) |
 
 ## Regras (resumo)
@@ -45,8 +46,9 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 - Bases **neutras** não produzem até serem capturadas (são objetivos).
 - A **frota viaja em velocidade fixa** → a distância importa (reforço chega atrasado).
 - **Captura** = chegar com mais tropas que a defesa. Vence quem eliminar o outro.
+- **Tipos de base** (F2): escudo resiste mais · veloz acelera frotas · canhão afina frotas inimigas por perto. **Zonas** de mapa aceleram/atrasam; **névoa** (`F`) esconde o que está longe.
 
 ## Próximos passos
-- **Playtest + balanceamento** (humano): ajustar os diais em runtime (overlay `O` + `Tab`/`-`/`=`) ou em `packages/shared`.
-- **Profundidade** (F2, [docs/04](docs/04-game-design.md)): névoa de guerra, tipos de base (canhão/escudo/veloz), cronômetro/pontuação, modificadores de mapa.
-- **Deploy** (F3): build estático público; depois PvP autoritativo (F4) reusando `packages/sim` — ver [docs/05](docs/05-roadmap.md) e [ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md).
+- **Calibração** (humano): ajustar os diais F2 em runtime (overlay `O` + `Tab`/`-`/`=`) ou em `packages/shared`.
+- **IA + canhão:** a IA já entende escudo, mas ainda não desvia do alcance de canhões ao rotear.
+- **PvP** (F4): servidor autoritativo reusando `packages/sim` — ver [docs/05](docs/05-roadmap.md) e [ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md).
