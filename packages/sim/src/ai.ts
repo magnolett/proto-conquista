@@ -1,4 +1,4 @@
-import { DIFFICULTY, upgradeCost } from '@conquista/shared';
+import { DIFFICULTY, upgradeCost, BASE_KINDS } from '@conquista/shared';
 import type { GameState, Node } from './types.js';
 import { dist, spawnFleet, upgradeNode } from './helpers.js';
 import { nextRng } from './prng.js';
@@ -65,9 +65,12 @@ export function aiThink(state: GameState): void {
     let bestScore = -Infinity;
     for (const t of nodes) {
       if (t.owner === 'enemy') continue;
+      // Defesa EFETIVA em unidades de count: escudo (dmgTakenMul<1) exige proporcionalmente
+      // mais tropas p/ capturar. 'normal' usa 1 ⇒ effDef = t.troops (comportamento intacto).
+      const effDef = t.troops / BASE_KINDS[t.kind].dmgTakenMul;
       const already = committed[t.id] ?? 0;
-      if (already > t.troops) continue; // já será capturado pelo que está a caminho — não empilhar
-      const needed = t.troops - already;
+      if (already > effDef) continue; // já será capturado pelo que está a caminho — não empilhar
+      const needed = effDef - already;
       if (force <= needed + 1) continue; // só ataca o que AINDA consegue tomar
       const score =
         t.tier * D.tierW - t.troops - dist(a, t) * D.distW + (t.owner === 'you' ? D.antiPlayerW : 0);

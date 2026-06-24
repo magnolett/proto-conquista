@@ -6,7 +6,7 @@ import {
   type SendOrder,
   type UpgradeOrder,
 } from '@conquista/sim';
-import { CFG, TIERS, DIFFICULTY_ORDER, type Difficulty } from '@conquista/shared';
+import { CFG, TIERS, BASE_KINDS, DIFFICULTY_ORDER, type Difficulty } from '@conquista/shared';
 import { computeView, toWorld, render, type View, type UiState } from './render.js';
 
 // ===== Canvas =====
@@ -30,6 +30,7 @@ let state: GameState = createInitialState(seed, { difficulty });
 let selection = new Set<number>();
 let sendRatio = CFG.sendDefault;
 let paused = false;
+let fog = false;
 const mouseWorld = { x: 0, y: 0 };
 let dragSourceId: number | null = null;
 let box: { x: number; y: number; w: number; h: number } | null = null;
@@ -72,6 +73,10 @@ const DIALS: readonly Dial[] = [
   { name: 'T2 cap', get: () => TIERS[1]!.cap, set: (v) => { TIERS[1]!.cap = Math.max(1, Math.round(v)); }, step: 2 },
   { name: 'T3 prod', get: () => TIERS[2]!.prod, set: (v) => { TIERS[2]!.prod = Math.max(0, +v.toFixed(2)); }, step: 0.1 },
   { name: 'T3 cap', get: () => TIERS[2]!.cap, set: (v) => { TIERS[2]!.cap = Math.max(1, Math.round(v)); }, step: 2 },
+  { name: 'escudo dmg', get: () => BASE_KINDS.shield.dmgTakenMul, set: (v) => { BASE_KINDS.shield.dmgTakenMul = Math.max(0.1, +v.toFixed(2)); }, step: 0.05 },
+  { name: 'veloz mult', get: () => BASE_KINDS.fast.fleetSpeedMul, set: (v) => { BASE_KINDS.fast.fleetSpeedMul = Math.max(1, +v.toFixed(2)); }, step: 0.1 },
+  { name: 'canhão alc', get: () => BASE_KINDS.cannon.cannonRange, set: (v) => { BASE_KINDS.cannon.cannonRange = Math.max(0, Math.round(v)); }, step: 10 },
+  { name: 'canhão dps', get: () => BASE_KINDS.cannon.cannonDps, set: (v) => { BASE_KINDS.cannon.cannonDps = Math.max(0, +v.toFixed(1)); }, step: 1 },
 ];
 let dialIndex = 0;
 
@@ -192,6 +197,8 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === ' ') {
     paused = !paused;
     e.preventDefault();
+  } else if (e.key.toLowerCase() === 'f') {
+    fog = !fog;
   } else if (e.key.toLowerCase() === 'o') {
     debugVisible = !debugVisible;
   } else if (e.key === 'Tab') {
@@ -237,6 +244,7 @@ function frame(now: number): void {
     box,
     sendRatio,
     paused,
+    fog,
     debug: debugVisible
       ? {
           visible: true,

@@ -1,10 +1,10 @@
-import { CFG, DIFFICULTY } from '@conquista/shared';
+import { CFG, DIFFICULTY, BASE_KINDS } from '@conquista/shared';
 import type { Config, Difficulty } from '@conquista/shared';
 import type { GameState, Node, Inputs } from './types.js';
 import { NO_INPUTS } from './types.js';
 import { seedToState } from './prng.js';
 import { generateMap } from './mapgen.js';
-import { resolveArrival, spawnFleet, upgradeNode } from './helpers.js';
+import { resolveArrival, spawnFleet, upgradeNode, zoneMulAt } from './helpers.js';
 import { aiThink } from './ai.js';
 
 export type {
@@ -14,6 +14,7 @@ export type {
   Inputs,
   SendOrder,
   UpgradeOrder,
+  Zone,
 } from './types.js';
 export { NO_INPUTS } from './types.js';
 export { mulberry32, nextRng, seedToState } from './prng.js';
@@ -25,6 +26,9 @@ export {
   spawnFleet,
   resolveArrival,
   upgradeNode,
+  zoneMulAt,
+  visibleNodeIds,
+  computeScore,
 } from './helpers.js';
 export { aiThink } from './ai.js';
 
@@ -41,7 +45,7 @@ export interface CreateOptions {
 export function createInitialState(seed: number, opts: CreateOptions = {}): GameState {
   const config = opts.config ?? CFG;
   const difficulty: Difficulty = opts.difficulty ?? 'normal';
-  const { nodes, rng } = generateMap(seedToState(seed), config);
+  const { nodes, rng, zones } = generateMap(seedToState(seed), config);
   return {
     nodes,
     fleets: [],
@@ -54,6 +58,7 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
     winner: null,
     nextFleetId: 0,
     config,
+    zones,
   };
 }
 
@@ -135,8 +140,25 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
     }
   }
 
-  // 2) Movimento de frotas + combate na chegada.
-  const speed = state.config.fleetSpeed;
+  // 1.5) Canhões (F2): bases-canhão afinam frotas de OUTRO dono dentro do alcance.
+  //      'normal' tem cannonRange 0 ⇒ este passo é inerte sem canhões (golden intacto).
+  let hasCannon = false;
+  for (const n of state.nodes) {
+    const k = BASE_KINDS[n.kind];
+    if (k.cannonRange <= 0) continue;
+    hasCannon = true;
+    const r2 = k.cannonRange * k.cannonRange;
+    for (const f of state.fleets) {
+      if (f.owner === n.owner) continue;
+      const dx = f.x - n.x;
+      const dy = f.y - n.y;
+      if (dx * dx + dy * dy <= r2) f.count -= k.cannonDps * dt;
+    }
+  }
+  if (hasCannon) state.fleets = state.fleets.filter((f) => f.count > 0);
+
+  // 2) Movimento de frotas + combate na chegada. Velocidade EFETIVA por frota:
+  //    fleetSpeed × speedMul (base 'veloz'); a Frente 2 multiplicará por zonas de mapa.
   const survivors: GameState['fleets'] = [];
   for (const f of state.fleets) {
     const tn = state.nodes[f.target];
@@ -144,7 +166,8 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
     const dx = tn.x - f.x;
     const dy = tn.y - f.y;
     const d = Math.hypot(dx, dy) || 0.0001;
-    const stepLen = speed * dt;
+    const stepLen =
+      state.config.fleetSpeed * (f.speedMul ?? 1) * zoneMulAt(f.x, f.y, state.zones) * dt;
     if (d <= stepLen + tn.radius * 0.4) {
       resolveArrival(f, tn);
     } else {
@@ -188,5 +211,6 @@ export function cloneState(state: GameState): GameState {
     winner: state.winner,
     nextFleetId: state.nextFleetId,
     config: state.config,
+    zones: state.zones ? state.zones.map((z) => ({ ...z })) : undefined,
   };
 }

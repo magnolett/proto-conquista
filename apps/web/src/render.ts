@@ -1,6 +1,7 @@
 import type { GameState, Node, Fleet } from '@conquista/sim';
+import { visibleNodeIds, computeScore } from '@conquista/sim';
 import type { Owner, Difficulty } from '@conquista/shared';
-import { DIFFICULTY } from '@conquista/shared';
+import { DIFFICULTY, BASE_KINDS, FOG } from '@conquista/shared';
 
 /** Paleta tática (porte de COL do game.js). */
 export const COL = {
@@ -63,6 +64,8 @@ export interface UiState {
   readonly sendRatio: number;
   /** Pausado? */
   readonly paused: boolean;
+  /** Névoa de guerra ligada? (F2 — afeta só a visão do jogador, nunca a sim/IA.) */
+  readonly fog?: boolean;
   /** Dados do overlay de debug (undefined = oculto). */
   readonly debug?: DebugOverlayData;
 }
@@ -96,6 +99,29 @@ function drawGrid(ctx: CanvasRenderingContext2D, v: View): void {
     ctx.lineTo(v.screenW, y);
   }
   ctx.stroke();
+}
+
+/** Zonas modificadoras de mapa (F2): estrada (clara, acelera) · lamaçal (terroso, atrasa). */
+function drawZones(ctx: CanvasRenderingContext2D, v: View, s: GameState): void {
+  if (!s.zones) return;
+  for (const z of s.zones) {
+    const p = toScreen(v, z.x, z.y);
+    const r = z.radius * v.scale;
+    const road = z.speedMul >= 1;
+    ctx.save();
+    const grad = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r);
+    grad.addColorStop(0, road ? 'rgba(120,200,255,0.16)' : 'rgba(150,110,60,0.22)');
+    grad.addColorStop(1, road ? 'rgba(120,200,255,0)' : 'rgba(150,110,60,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = road ? 'rgba(120,200,255,0.28)' : 'rgba(150,110,60,0.34)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 7]);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawGuides(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiState): void {
@@ -150,7 +176,77 @@ function drawFleet(ctx: CanvasRenderingContext2D, v: View, s: GameState, f: Flee
   }
 }
 
-function drawNode(ctx: CanvasRenderingContext2D, v: View, n: Node, selected: boolean): void {
+/** Decoração visual por tipo de base (F2): forma/ícone — zero asset. */
+function drawKindDecor(
+  ctx: CanvasRenderingContext2D,
+  v: View,
+  n: Node,
+  p: { x: number; y: number },
+  r: number,
+  c: string,
+): void {
+  if (n.kind === 'normal') return;
+  ctx.save();
+  if (n.kind === 'shield') {
+    // anel hexagonal externo = mais resistente
+    ctx.strokeStyle = c;
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      const px = p.x + Math.cos(a) * (r + 6);
+      const py = p.y + Math.sin(a) * (r + 6);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  } else if (n.kind === 'fast') {
+    // chevron duplo acima = mais rápido
+    ctx.strokeStyle = c;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 2.5;
+    const top = p.y - r - 4;
+    for (let k = 0; k < 2; k++) {
+      const oy = top - k * 5;
+      ctx.beginPath();
+      ctx.moveTo(p.x - 6, oy + 4);
+      ctx.lineTo(p.x, oy);
+      ctx.lineTo(p.x + 6, oy + 4);
+      ctx.stroke();
+    }
+  } else if (n.kind === 'cannon') {
+    // alcance tênue + 4 "canos" radiais
+    const range = BASE_KINDS[n.kind].cannonRange * v.scale;
+    ctx.strokeStyle = c;
+    ctx.globalAlpha = 0.12;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, range, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      const a = (Math.PI / 2) * i + Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r);
+      ctx.lineTo(p.x + Math.cos(a) * (r + 7), p.y + Math.sin(a) * (r + 7));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawNode(
+  ctx: CanvasRenderingContext2D,
+  v: View,
+  n: Node,
+  selected: boolean,
+  hideCount = false,
+): void {
   const c = ownerColor(n.owner);
   const p = toScreen(v, n.x, n.y);
   const r = n.radius * v.scale;
@@ -165,6 +261,7 @@ function drawNode(ctx: CanvasRenderingContext2D, v: View, n: Node, selected: boo
   ctx.strokeStyle = c;
   ctx.stroke();
   ctx.restore();
+  drawKindDecor(ctx, v, n, p, r, c);
   if (n.underAttack) {
     ctx.save();
     ctx.strokeStyle = 'rgba(255,90,70,0.9)';
@@ -188,10 +285,18 @@ function drawNode(ctx: CanvasRenderingContext2D, v: View, n: Node, selected: boo
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = 'bold ' + Math.max(12, Math.floor(r * 0.8)) + 'px system-ui,Segoe UI,Arial';
-  ctx.fillText(String(Math.floor(n.troops)), p.x, p.y);
+  ctx.fillText(hideCount ? '?' : String(Math.floor(n.troops)), p.x, p.y);
   ctx.fillStyle = 'rgba(234,242,255,0.5)';
   ctx.font = '10px system-ui,Arial';
   ctx.fillText('T' + (n.tier + 1), p.x, p.y + r + 12);
+}
+
+/** Formata segundos em m:ss (cronômetro da partida — F2). */
+function fmtTime(t: number): string {
+  const total = Math.max(0, Math.floor(t));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return m + ':' + String(sec).padStart(2, '0');
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiState): void {
@@ -219,6 +324,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
       DIFFICULTY[diff].label +
       '   ·   Seed: ' +
       s.seed +
+      '   ·   ⏱ ' +
+      fmtTime(s.time) +
       (ui.paused ? '   — PAUSA' : ''),
     v.screenW / 2,
     16,
@@ -226,7 +333,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
   ctx.fillStyle = 'rgba(234,242,255,0.55)';
   ctx.font = '12px system-ui,Arial';
   ctx.fillText(
-    'arraste base sua → enviar  |  caixa + clique = multi-envio  |  [1-4] força  [U] upgrade  [Espaço] pausa  [R] nova seed  [Shift+R] mesma seed  [G] dificuldade  [O] debug',
+    'arraste base sua → enviar  |  caixa + clique = multi-envio  |  [1-4] força  [U] upgrade  [Espaço] pausa  [R] nova seed  [Shift+R] mesma seed  [G] dificuldade  [F] névoa  [O] debug',
     v.screenW / 2,
     v.screenH - 22,
   );
@@ -239,12 +346,27 @@ function drawBanner(ctx: CanvasRenderingContext2D, v: View, s: GameState): void 
   ctx.fillRect(0, 0, v.screenW, v.screenH);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const cx = v.screenW / 2;
+  const cy = v.screenH / 2;
   ctx.fillStyle = s.winner === 'you' ? COL.you : COL.enemy;
   ctx.font = 'bold 54px system-ui,Arial';
-  ctx.fillText(s.winner === 'you' ? 'VITÓRIA' : 'DERROTA', v.screenW / 2, v.screenH / 2 - 20);
+  ctx.fillText(s.winner === 'you' ? 'VITÓRIA' : 'DERROTA', cx, cy - 48);
+  // Placar (F2): tempo da partida + pontuação dos dois lados.
+  const ys = computeScore(s, 'you');
+  const es = computeScore(s, 'enemy');
   ctx.fillStyle = COL.text;
-  ctx.font = '18px system-ui,Arial';
-  ctx.fillText('pressione R para uma nova partida', v.screenW / 2, v.screenH / 2 + 30);
+  ctx.font = 'bold 22px system-ui,Arial';
+  ctx.fillText('Tempo ' + fmtTime(s.time), cx, cy + 4);
+  ctx.font = '20px system-ui,Arial';
+  ctx.fillStyle = COL.you;
+  ctx.fillText('Você ' + ys, cx - 70, cy + 38);
+  ctx.fillStyle = COL.text;
+  ctx.fillText('×', cx, cy + 38);
+  ctx.fillStyle = COL.enemy;
+  ctx.fillText(es + ' IA', cx + 70, cy + 38);
+  ctx.fillStyle = COL.text;
+  ctx.font = '16px system-ui,Arial';
+  ctx.fillText('pressione R para uma nova partida', cx, cy + 78);
   ctx.restore();
 }
 
@@ -296,6 +418,38 @@ function drawDebugOverlay(ctx: CanvasRenderingContext2D, s: GameState, d: DebugO
   ctx.restore();
 }
 
+/** Fontes de visão do jogador (F2 — névoa): centro de cada base/frota sua. */
+function visionSources(s: GameState): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  for (const n of s.nodes) if (n.owner === 'you') out.push({ x: n.x, y: n.y });
+  for (const f of s.fleets) if (f.owner === 'you') out.push({ x: f.x, y: f.y });
+  return out;
+}
+
+/** Overlay de névoa: escurece o mapa e "abre" círculos suaves de visão nas fontes. */
+function drawFog(
+  ctx: CanvasRenderingContext2D,
+  v: View,
+  sources: Array<{ x: number; y: number }>,
+): void {
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,7,16,0.6)';
+  ctx.fillRect(0, 0, v.screenW, v.screenH);
+  ctx.globalCompositeOperation = 'destination-out';
+  const r = FOG.sightRadius * v.scale;
+  for (const s of sources) {
+    const p = toScreen(v, s.x, s.y);
+    const g = ctx.createRadialGradient(p.x, p.y, r * 0.55, p.x, p.y, r);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 /** Desenha um frame completo a partir do GameState + UI. A render NÃO decide regra. */
 export function render(
   ctx: CanvasRenderingContext2D,
@@ -306,9 +460,32 @@ export function render(
   ctx.fillStyle = COL.bg;
   ctx.fillRect(0, 0, v.screenW, v.screenH);
   drawGrid(ctx, v);
+  drawZones(ctx, v, s);
   drawGuides(ctx, v, s, ui);
-  for (const f of s.fleets) drawFleet(ctx, v, s, f);
-  for (const n of s.nodes) drawNode(ctx, v, n, ui.selection.has(n.id));
+
+  // Névoa de guerra (F2): computa a visibilidade do jogador (só apresentação).
+  const fog = ui.fog ?? false;
+  const sources = fog ? visionSources(s) : null;
+  const visible = fog ? visibleNodeIds(s, FOG.sightRadius) : null;
+  const r2 = FOG.sightRadius * FOG.sightRadius;
+  const seen = (x: number, y: number): boolean => {
+    if (!sources) return true;
+    for (const pt of sources) {
+      const dx = x - pt.x;
+      const dy = y - pt.y;
+      if (dx * dx + dy * dy <= r2) return true;
+    }
+    return false;
+  };
+
+  for (const f of s.fleets) {
+    if (fog && f.owner !== 'you' && !seen(f.x, f.y)) continue; // frota inimiga na névoa: oculta
+    drawFleet(ctx, v, s, f);
+  }
+  for (const n of s.nodes) {
+    const hideCount = !!visible && n.owner !== 'you' && !visible.has(n.id);
+    drawNode(ctx, v, n, ui.selection.has(n.id), hideCount);
+  }
   if (ui.box && (ui.box.w > 2 || ui.box.h > 2)) {
     const p = toScreen(v, ui.box.x, ui.box.y);
     const w = ui.box.w * v.scale;
@@ -320,6 +497,7 @@ export function render(
     ctx.strokeRect(p.x, p.y, w, h);
     ctx.restore();
   }
+  if (fog && sources) drawFog(ctx, v, sources);
   drawHUD(ctx, v, s, ui);
   if (ui.debug?.visible) drawDebugOverlay(ctx, s, ui.debug);
   if (s.gameOver) drawBanner(ctx, v, s);

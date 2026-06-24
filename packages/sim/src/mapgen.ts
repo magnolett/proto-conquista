@@ -1,5 +1,6 @@
-import type { Config } from '@conquista/shared';
-import type { Node } from './types.js';
+import { MAP_MODS } from '@conquista/shared';
+import type { Config, BaseKind } from '@conquista/shared';
+import type { Node, Zone } from './types.js';
 import { mkNode } from './helpers.js';
 import { nextRng } from './prng.js';
 
@@ -14,7 +15,10 @@ import { nextRng } from './prng.js';
  *
  * Retorna os nós criados e o estado final do PRNG.
  */
-export function generateMap(rngState: number, config: Config): { nodes: Node[]; rng: number } {
+export function generateMap(
+  rngState: number,
+  config: Config,
+): { nodes: Node[]; rng: number; zones: Zone[] } {
   const W = config.worldW;
   const H = config.worldH;
   const cx = W / 2;
@@ -47,7 +51,7 @@ export function generateMap(rngState: number, config: Config): { nodes: Node[]; 
   placed.push(mb);
 
   // Base central contestada (no eixo de simetria → é o próprio espelho).
-  nodes.push(mkNode(nodes.length, cx, cy, 'neutral', 2, 42));
+  nodes.push(mkNode(nodes.length, cx, cy, 'neutral', 2, 42, 'shield')); // fortaleza central
   placed.push({ x: cx, y: cy });
 
   // Pares de bases neutras espelhadas.
@@ -64,12 +68,27 @@ export function generateMap(rngState: number, config: Config): { nodes: Node[]; 
     // short-circuit idêntico ao game.js: o 2º rand() só corre se o 1º falhar.
     const tier = rand() < 0.25 ? 2 : rand() < 0.5 ? 1 : 0;
     const def = tier === 2 ? 36 : tier === 1 ? 20 : 9;
-    nodes.push(mkNode(nodes.length, x, y, 'neutral', tier, def));
+    // Especialidade sorteada do PRNG, IGUAL nos dois nós do par (mantém a simetria/justiça).
+    const kr = rand();
+    const kind: BaseKind = kr < 0.25 ? 'cannon' : kr < 0.5 ? 'shield' : kr < 0.75 ? 'fast' : 'normal';
+    nodes.push(mkNode(nodes.length, x, y, 'neutral', tier, def, kind));
     placed.push({ x, y });
-    nodes.push(mkNode(nodes.length, m.x, m.y, 'neutral', tier, def));
+    nodes.push(mkNode(nodes.length, m.x, m.y, 'neutral', tier, def, kind));
     placed.push(m);
     made++;
   }
 
-  return { nodes, rng };
+  // Zonas modificadoras (F2): pares espelhados — estrada (acelera) + lamaçal (atrasa).
+  const zones: Zone[] = [];
+  const addZonePair = (speedMul: number, radius: number): void => {
+    const zx = 200 + rand() * (W - 400);
+    const zy = 150 + rand() * (H - 300);
+    zones.push({ x: zx, y: zy, radius, speedMul });
+    const zm = mirror(zx, zy);
+    zones.push({ x: zm.x, y: zm.y, radius, speedMul });
+  };
+  addZonePair(MAP_MODS.roadSpeedMul, MAP_MODS.roadRadius);
+  addZonePair(MAP_MODS.mudSpeedMul, MAP_MODS.mudRadius);
+
+  return { nodes, rng, zones };
 }

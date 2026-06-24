@@ -50,3 +50,24 @@ export interface DifficultyConfig {
   /** Probabilidade de fazer upgrade econômico num tick. */
   readonly upgradeChance: number;
 }
+
+/** Especialidade (tipo) de uma base. 'normal' = comportamento padrão. */
+export type BaseKind = 'normal' | 'cannon' | 'shield' | 'fast';
+
+/**
+ * Parâmetros de cada tipo de base (os "diais" das especialidades).
+ * Valores neutros (mul = 1, range = 0) ⇒ sem efeito — é exatamente o caso de 'normal',
+ * o que mantém a regra atual intacta para bases comuns.
+ */
+export interface BaseKindConfig {
+  /** Rótulo legível (pt-br). */
+  readonly label: string;
+  /** Multiplicador do dano recebido em ataque. <1 (escudo) = mais resistente. Mutável: dial. */
+  dmgTakenMul: number;
+  /** Multiplicador de velocidade das frotas que PARTEM desta base. >1 (veloz). Mutável: dial. */
+  fleetSpeedMul: number;
+  /** Alcance do canhão (0 = não é canhão); frotas de outro dono dentro dele tomam dano. Mutável. */
+  cannonRange: number;
+  /** Dano por segundo do canhão a frotas inimigas no alcance. Mutável: dial. */
+  cannonDps: number;
+}

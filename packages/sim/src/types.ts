@@ -1,4 +1,4 @@
-import type { Owner, Difficulty, Config } from '@conquista/shared';
+import type { Owner, Difficulty, Config, BaseKind } from '@conquista/shared';
 
 /**
  * Base (nó do grafo). Tudo que a sim precisa p/ economia, combate e IA.
@@ -11,6 +11,8 @@ export interface Node {
   x: number;
   y: number;
   owner: Owner;
+  /** Especialidade da base (F2): normal/canhão/escudo/veloz. */
+  kind: BaseKind;
   tier: number;
   troops: number;
   prod: number;
@@ -31,6 +33,17 @@ export interface Fleet {
   /** Id do nó-alvo. */
   target: number;
   count: number;
+  /** Multiplicador de velocidade herdado da base de origem (F2: 'veloz'). Ausente ⇒ 1. */
+  speedMul?: number;
+}
+
+/** Zona modificadora de mapa (F2): multiplica a velocidade da frota dentro do raio. */
+export interface Zone {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  /** Multiplicador de velocidade: >1 estrada (acelera), <1 terreno (atrasa). */
+  readonly speedMul: number;
 }
 
 /**
@@ -56,6 +69,8 @@ export interface GameState {
   nextFleetId: number;
   /** Config de balanceamento usada nesta partida. */
   readonly config: Config;
+  /** Zonas modificadoras de velocidade do mapa (F2). Ausente ⇒ sem modificadores. */
+  zones?: Zone[];
 }
 
 /**
