@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Caminhos relativos: funciona tanto em dev local quanto num subpath do GitHub Pages.
+  base: './',
   server: {
     port: 5173,
     strictPort: false,

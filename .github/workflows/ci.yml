@@ -1,0 +1,51 @@
+# CI (push + pull_request): typecheck, testes e build do app web.
+# Deploy (push em master): publica apps/web/dist no GitHub Pages.
+name: CI & Deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # lê packageManager (pnpm@9.15.9) do package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter web build
+      - name: Configura Pages
+        if: github.ref == 'refs/heads/master'
+        uses: actions/configure-pages@v5
+      - name: Sobe artefato do Pages
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: ci
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publica no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
