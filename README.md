@@ -20,11 +20,11 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 
 ## Estado
 
-**Protótipo single-file jogável** (`index.html` + `game.js`, Canvas 2D, JS puro, **zero build**). Mapa espelhado (partida justa), produção por *tier*, frotas com tempo de viagem, captura de bases, multi-seleção, e **IA que defende/expande/evolui**. Sintaxe validada (`node --check`); **falta playtest/balanceamento** (humano) e a graduação pra TS+Vite com sim determinística.
+**Monorepo TypeScript jogável** (pnpm + Vite + TS strict): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado (partida justa), produção por *tier*, frotas com tempo de viagem, captura de bases, multi-seleção, **IA honesta com 3 dificuldades** + overlay de playtest. **Verificado:** typecheck 0 erros · **22 testes** (Vitest, golden replays) · build web ok. Graduado do protótipo single-file (F0→F1); falta playtest/balanceamento humano e deploy.
 
 ## Rodando
 
-**Duplo-clique no `index.html`** — abre no navegador, sem instalação. (Se o navegador bloquear o script local, use o Live Server do VS Code.)
+`pnpm install` na raiz, depois **`pnpm --filter web dev`** (Vite em http://localhost:5173). Testes: `pnpm test` · typecheck: `pnpm typecheck` · build: `pnpm --filter web build`.
 
 ### Controles
 
@@ -36,7 +36,9 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 | **1 / 2 / 3 / 4** | Força do envio (25 / 50 / 75 / 100%) |
 | **U** | Upgrade da(s) base(s) selecionada(s) — custa tropas, sobe produção e teto |
 | **Espaço** | Pausa |
-| **R** | Reinicia a partida |
+| **R** / **Shift+R** | Nova partida (nova seed) / mesma seed (replay) |
+| **G** | Cicla a dificuldade da IA (fácil / normal / difícil) |
+| **O** · **Tab** · **− / =** | Overlay de debug · seleciona dial · ajusta o dial (playtest) |
 
 ## Regras (resumo)
 - Suas bases **produzem** tropas até um teto; **tier** maior = mais produção e teto.
@@ -45,6 +47,6 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 - **Captura** = chegar com mais tropas que a defesa. Vence quem eliminar o outro.
 
 ## Próximos passos
-- **Playtest + balanceamento** (humano): ajustar `CFG`/`TIERS` em `game.js`.
-- **Graduar** pra TypeScript + Vite com `packages/sim` determinística (golden replays / testes por seed) — ver [docs/05](docs/05-roadmap.md) e [ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md).
-- **Profundidade** ([docs/04](docs/04-game-design.md)): névoa de guerra, dificuldades de IA, tipos de base, cronômetro/pontuação.
+- **Playtest + balanceamento** (humano): ajustar os diais em runtime (overlay `O` + `Tab`/`-`/`=`) ou em `packages/shared`.
+- **Profundidade** (F2, [docs/04](docs/04-game-design.md)): névoa de guerra, tipos de base (canhão/escudo/veloz), cronômetro/pontuação, modificadores de mapa.
+- **Deploy** (F3): build estático público; depois PvP autoritativo (F4) reusando `packages/sim` — ver [docs/05](docs/05-roadmap.md) e [ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md).

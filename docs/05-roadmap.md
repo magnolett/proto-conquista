@@ -4,16 +4,17 @@ Entrega por fases; cada fase é jogável e fecha um risco. Ordem pensada pra **p
 
 ---
 
-## F0 — Protótipo (provar a jogabilidade) ✅ *em playtest*
+## F0 — Protótipo (provar a jogabilidade) ✅ *construído (falta playtest humano)*
 
 **Escopo:** single-file (Canvas+JS), bases/tiers/frotas/combate/captura, IA honesta (defende/expande/evolui), multi-seleção, mapa espelhado, vitória/derrota/restart.
 **Critério de saída:** o dono joga e **se diverte**; a partida tem arco (abrir → meio → fim) e a IA é um oponente real.
-**Pendência:** balanceamento (`CFG`/`TIERS`) por playtest.
+**Pendência:** balanceamento por playtest — agora via diais em runtime no overlay (`O` + `Tab`/`-`/`=`).
 
-## F1 — Graduação técnica (sustentar o crescimento)
+## F1 — Graduação técnica (sustentar o crescimento) ✅ *feito (falta CI)*
 
-**Escopo:** migrar pra **TypeScript + Vite**; extrair **`packages/sim` determinística pura** (PRNG seedado, sem `Math.random`/`Date.now`) separada da render; `packages/shared` com os diais tipados; **testes** (Vitest + fast-check: conservação de tropas, captura; + golden replays por seed); git + CI.
-**Critério de saída:** `pnpm test`/`typecheck` verdes; sim isolável e replayável; render só desenha.
+**Escopo:** migrar pra **TypeScript + Vite**; extrair **`packages/sim` determinística pura** (PRNG mulberry32 seedado no state, sem `Math.random`/`Date.now`) separada da render; `packages/shared` com os diais tipados; **testes** (Vitest + fast-check: conservação, captura; + golden replays por seed); git.
+**Entregue (2026-06-24):** monorepo pnpm; `pnpm typecheck` 0 erros e **22 testes** verdes; sim isolável e replayável; render só desenha; `game.js` aposentado.
+**Pendência:** CI (`pnpm test`/`typecheck` no push).
 
 ## F2 — Profundidade (sem arte nova)
 

@@ -4,18 +4,17 @@
 RTS de **conquista de território em tempo real** no estilo Galcon/Auralux/Nexus Wars: bases produzem tropas, frotas viajam pelo mapa, captura por superioridade numérica, partidas curtas contra IA. **Tese central: a profundidade vem da SIMULAÇÃO (economia, timing, geometria, multi-frente), não dos gráficos.** Arte = formas + luz + código (**zero modelagem**), tudo **code-first** (sem editor visual). Pilares: time-to-fun < 30s, decisão > reflexo, oponente de IA que joga de verdade.
 
 ## Estado (real, não aspiracional)
-**Protótipo single-file jogável.** `index.html` + `game.js` (Canvas 2D, **JS puro, sem build**) — abre por duplo-clique. Sim + render no mesmo arquivo (~310 linhas). Sintaxe validada (`node --check` OK) + lógica revisada. **Ainda NÃO há:** playtest/balanceamento, testes automatizados, TypeScript, monorepo, git, deploy. Tudo isso é alvo do roadmap ([docs/05](docs/05-roadmap.md)).
+**Monorepo TypeScript jogável — fonte única.** Graduado do protótipo single-file (F0→F1) para **pnpm + Vite + TS strict**: `packages/sim` (simulação determinística PURA, sem `Math.random`/`Date.now`, PRNG mulberry32 no state), `packages/shared` (diais tipados `CFG`/`TIERS`/`DIFFICULTY`), `apps/web` (Canvas 2D, só render+input). **Verificado:** `pnpm typecheck` 0 erros · **22 testes** (Vitest + fast-check: conservação, captura, golden replays, PRNG, IA) · `pnpm --filter web build` ok. IA com 3 dificuldades (`G`) + fix de superinvestida; overlay de debug + edição de diais em runtime (`O`/`Tab`/`-`/`=`); seed visível + `Shift+R`. O `game.js`/`index.html` single-file foram **aposentados** (preservados no histórico git). **Ainda NÃO há:** deploy, CI, playtest/balanceamento humano. Ver [docs/05](docs/05-roadmap.md).
 
-## Stack atual × alvo
-- **Atual:** HTML + Canvas 2D + JavaScript ES2020, single-file, **zero dependência, zero build**.
-- **Alvo** ([ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md) + [docs/03](docs/03-arquitetura.md)): **TypeScript strict + Vite**, monorepo com **`packages/sim` determinística pura** (sem `Math.random`/`Date.now`, PRNG seedado) separada da render — habilita golden replays e testes por seed, como interregno/project-football.
+## Stack
+- **Atual:** **TypeScript strict + Vite**, monorepo pnpm — `packages/sim` (determinística pura, PRNG seedado no state), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, render+input). Golden replays + testes por seed, como interregno/project-football ([ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md) + [docs/03](docs/03-arquitetura.md)).
+- **Próximo:** profundidade (F2: névoa, tipos de base) + deploy estático (F3); PvP autoritativo (F4) reusa `packages/sim`.
 
-## Arquitetura (hoje, em `game.js`)
-- **Estado:** `nodes[]` (bases: dono/tropas/tier/cap/prod) + `fleets[]` (frotas em trânsito).
-- **Loop:** `requestAnimationFrame` → `update(dt)` (economia, movimento de frotas, combate na chegada, IA por timer, vitória) → `render()`.
-- **IA (`aiThink`):** heurística determinística por ticks — defende base ameaçada, expande pro alvo mais barato/valioso, faz upgrade na retaguarda. **Não trapaceia** (mesmas regras do jogador).
-- **Entrada:** arraste base→base (enviar), caixa de seleção + clique (multi-envio), teclas 1-4/U/R/Espaço.
-- **Render:** círculos com *glow*, frotas como setas, guias até o mouse, HUD. **Zero asset.**
+## Arquitetura (monorepo)
+- **`packages/sim`** (pura, sem DOM): `GameState` (`nodes[]`/`fleets[]`/`rng`/`difficulty`/…), `createInitialState(seed, opts)` + `step(state, inputs, dt)` (economia · frotas · combate · IA por tick · vitória). PRNG `mulberry32` com estado no `GameState` (avanço puro, `nextRng`). Inputs do jogador entram como **dado** (`Inputs { sends, upgrades }`), não event handler.
+- **`packages/shared`:** `CFG`/`TIERS`/`DIFFICULTY` tipados (os diais) + tipos.
+- **`apps/web`:** Canvas 2D — só render (bases com *glow*, frotas, guias, HUD, overlay de debug) + input (arraste, caixa, teclas). Mundo lógico fixo (`worldW×worldH`) com fit+letterbox; a render **nunca decide regra**. **Zero asset.**
+- **IA (`aiThink`):** heurística determinística honesta (mesmas regras, só lê estado público), parametrizada por `DIFFICULTY[difficulty]`, com fix de superinvestida (`committed[]`).
 
 ## Regras invariantes (não violar)
 - **A sim é a verdade; a render NUNCA decide regra.** Hoje é single-player local; ao graduar (F1), a sim pura é autoritativa. *Lição herdada do project-football: bug visual ≠ bug de sim.*
@@ -24,7 +23,7 @@ RTS de **conquista de território em tempo real** no estilo Galcon/Auralux/Nexus
 - **Balanceamento em config**, nunca hardcoded esparramado — hoje em `CFG`/`TIERS` no topo de `game.js`; no alvo, um módulo de "diais".
 
 ## Rodar
-Duplo-clique em `index.html` (ou Live Server). Sem `npm`, sem build. Controles no rodapé da tela e em [docs/04](docs/04-game-design.md).
+`pnpm install` na raiz, depois `pnpm --filter web dev` (Vite em http://localhost:5173). Testes: `pnpm test`. Typecheck: `pnpm typecheck`. Controles no rodapé da tela e em [docs/04](docs/04-game-design.md).
 
 ## Critérios de qualidade
 Sim pura/determinística (no alvo) · render não decide regra · IA joga pelas mesmas regras · **zero asset de arte** · balanceamento em config testável por seed.
