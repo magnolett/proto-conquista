@@ -1,0 +1,19 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@conquista/sim": "workspace:*",
+    "@conquista/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "5.4.11"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "conquista-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RTS de conquista de território — monorepo TS (sim determinística + shared + web)",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vitest": "2.1.8",
+    "fast-check": "3.23.1"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
