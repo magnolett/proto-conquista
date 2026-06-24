@@ -65,7 +65,9 @@ export function aiThink(state: GameState): void {
     let bestScore = -Infinity;
     for (const t of nodes) {
       if (t.owner === 'enemy') continue;
-      const needed = t.troops - (committed[t.id] ?? 0);
+      const already = committed[t.id] ?? 0;
+      if (already > t.troops) continue; // já será capturado pelo que está a caminho — não empilhar
+      const needed = t.troops - already;
       if (force <= needed + 1) continue; // só ataca o que AINDA consegue tomar
       const score =
         t.tier * D.tierW - t.troops - dist(a, t) * D.distW + (t.owner === 'you' ? D.antiPlayerW : 0);

@@ -50,12 +50,10 @@ describe('IA — FIX da superinvestida (committed[])', () => {
     expect(s.fleets.some((f) => f.target === 0 && f.count === 65)).toBe(true);
   });
 
-  it('SEM o committed seria superinvestida: 3 atacantes não geram 3 frotas redundantes ao MESMO alvo já coberto em voo', () => {
-    // Alvo com defesa baixa e uma frota em voo que JÁ o cobre por folga (committed alto).
-    // Com o fix, atacantes cujo force não supera o needed restante (negativo→guard) ...
-    // ATENÇÃO: pelo contrato, needed negativo deixa o guard `force>needed+1` verdadeiro,
-    // então o fix NÃO proíbe pile quando o alvo é o único viável. Este teste documenta
-    // a fronteira: havendo alvos ALTERNATIVOS, atacantes se espalham em vez de empilhar.
+  it('committed espalha os atacantes: 3 bases não empilham no mesmo alvo já reservado', () => {
+    // 3 atacantes fortes e 3 alvos baratos. Sem o committed, o de melhor score (A,
+    // perto/barato) atrairia mais de um. Com o committed[] + o skip de "já coberto",
+    // o 1º atacante reserva A e os seguintes se espalham por B/C.
     const A = mkNode(0, 600, 360, 'neutral', 0, 8); // alvo principal barato
     const B = mkNode(1, 200, 150, 'neutral', 1, 12); // alternativo
     const C = mkNode(2, 1000, 600, 'neutral', 1, 12); // alternativo
@@ -64,9 +62,20 @@ describe('IA — FIX da superinvestida (committed[])', () => {
     const a3 = mkNode(5, 620, 360, 'enemy', 0, 100);
     const s = makeState('hard', [A, B, C, a1, a2, a3]);
     aiThink(s);
-    // Espalhou por mais de um alvo (não jogou os 3 no mesmo nó).
     const targetsHit = new Set(s.fleets.filter((f) => f.owner === 'enemy').map((f) => f.target));
-    expect(targetsHit.size).toBeGreaterThanOrEqual(2);
+    expect(targetsHit.size).toBeGreaterThanOrEqual(2); // espalhou, não empilhou tudo num nó
+    expect(s.fleets.filter((f) => f.target === A.id).length).toBe(1); // A reservado: tomado uma vez
+  });
+
+  it('alvo JÁ super-coberto em voo (committed > troops) não recebe pile, nem sendo o único viável', () => {
+    // Refinamento do orquestrador (paridade com o integ-proto): se o que já está a
+    // caminho basta p/ capturar, não manda reforço redundante — nem se não houver outro alvo.
+    const A = mkNode(0, 600, 360, 'neutral', 0, 10);
+    const a1 = mkNode(1, 610, 370, 'enemy', 0, 100);
+    const s = makeState('hard', [A, a1]);
+    s.fleets.push({ id: s.nextFleetId++, owner: 'enemy', x: 0, y: 0, target: 0, count: 20 }); // 20 > 10 ⇒ já garantido
+    aiThink(s);
+    expect(s.fleets.filter((f) => f.target === 0 && f.count !== 20).length).toBe(0);
   });
 
   it('sem alvo viável (defesa alta demais p/ a força), a IA não ataca', () => {
