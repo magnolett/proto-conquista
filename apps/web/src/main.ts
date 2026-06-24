@@ -6,7 +6,7 @@ import {
   type SendOrder,
   type UpgradeOrder,
 } from '@conquista/sim';
-import { CFG, DIFFICULTY_ORDER, type Difficulty } from '@conquista/shared';
+import { CFG, TIERS, DIFFICULTY_ORDER, type Difficulty } from '@conquista/shared';
 import { computeView, toWorld, render, type View, type UiState } from './render.js';
 
 // ===== Canvas =====
@@ -39,6 +39,41 @@ let downPos: { x: number; y: number } | null = null;
 // Fila de ordens do jogador a despachar no próximo step (a sim é a verdade).
 let pendingSends: SendOrder[] = [];
 let pendingUpgrades: UpgradeOrder[] = [];
+
+// ===== Overlay de debug (tecla O) + edição de diais (Tab / - / =) =====
+let debugVisible = false;
+const fpsBuf = new Array<number>(60).fill(60);
+let fpsPos = 0;
+function recordFrame(dt: number): void {
+  if (dt > 0) {
+    fpsBuf[fpsPos] = 1 / dt;
+    fpsPos = (fpsPos + 1) % fpsBuf.length;
+  }
+}
+function avgFps(): number {
+  let s = 0;
+  for (const v of fpsBuf) s += v;
+  return s / fpsBuf.length;
+}
+
+// Diais ajustáveis em runtime: mutam CFG/TIERS (os "diais" de balanceamento).
+// fleetSpeed é lido ao vivo pela sim; prod/cap valem nas próximas aplicações de tier.
+interface Dial {
+  readonly name: string;
+  get(): number;
+  set(v: number): void;
+  readonly step: number;
+}
+const DIALS: readonly Dial[] = [
+  { name: 'fleetSpeed', get: () => CFG.fleetSpeed, set: (v) => { CFG.fleetSpeed = Math.max(20, v); }, step: 5 },
+  { name: 'T1 prod', get: () => TIERS[0]!.prod, set: (v) => { TIERS[0]!.prod = Math.max(0, +v.toFixed(2)); }, step: 0.1 },
+  { name: 'T1 cap', get: () => TIERS[0]!.cap, set: (v) => { TIERS[0]!.cap = Math.max(1, Math.round(v)); }, step: 2 },
+  { name: 'T2 prod', get: () => TIERS[1]!.prod, set: (v) => { TIERS[1]!.prod = Math.max(0, +v.toFixed(2)); }, step: 0.1 },
+  { name: 'T2 cap', get: () => TIERS[1]!.cap, set: (v) => { TIERS[1]!.cap = Math.max(1, Math.round(v)); }, step: 2 },
+  { name: 'T3 prod', get: () => TIERS[2]!.prod, set: (v) => { TIERS[2]!.prod = Math.max(0, +v.toFixed(2)); }, step: 0.1 },
+  { name: 'T3 cap', get: () => TIERS[2]!.cap, set: (v) => { TIERS[2]!.cap = Math.max(1, Math.round(v)); }, step: 2 },
+];
+let dialIndex = 0;
 
 function newMatch(newSeed: number): void {
   seed = newSeed >>> 0;
@@ -157,6 +192,17 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === ' ') {
     paused = !paused;
     e.preventDefault();
+  } else if (e.key.toLowerCase() === 'o') {
+    debugVisible = !debugVisible;
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    dialIndex = (dialIndex + 1) % DIALS.length;
+  } else if (e.key === '-') {
+    const d = DIALS[dialIndex]!;
+    d.set(d.get() - d.step);
+  } else if (e.key === '=') {
+    const d = DIALS[dialIndex]!;
+    d.set(d.get() + d.step);
   }
 });
 
@@ -176,6 +222,7 @@ function frame(now: number): void {
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.05); // clamp p/ não "teleportar" frotas após um stutter
+  recordFrame(dt);
 
   if (!paused && !state.gameOver) {
     step(state, collectInputs(), dt);
@@ -190,6 +237,14 @@ function frame(now: number): void {
     box,
     sendRatio,
     paused,
+    debug: debugVisible
+      ? {
+          visible: true,
+          fps: avgFps(),
+          dials: DIALS.map((d) => ({ name: d.name, value: d.get() })),
+          dialIndex,
+        }
+      : undefined,
   };
   render(ctx, view, state, ui);
   requestAnimationFrame(frame);

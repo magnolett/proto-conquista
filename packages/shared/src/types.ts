@@ -11,18 +11,18 @@ export type Difficulty = 'easy' | 'normal' | 'hard';
 
 /** Configuração de um tier de base (produção / teto / raio). */
 export interface TierConfig {
-  /** Tropas produzidas por segundo. */
-  readonly prod: number;
-  /** Teto de tropas (produção só cresce abaixo dele). */
-  readonly cap: number;
+  /** Tropas produzidas por segundo. Mutável: é um "dial" ajustável em runtime (playtest). */
+  prod: number;
+  /** Teto de tropas (produção só cresce abaixo dele). Mutável: dial de runtime. */
+  cap: number;
   /** Raio visual/de colisão. */
   readonly r: number;
 }
 
 /** "Diais" de balanceamento global. */
 export interface Config {
-  /** Velocidade das frotas em px/s. */
-  readonly fleetSpeed: number;
+  /** Velocidade das frotas em px/s. Mutável: dial ajustável em runtime (playtest). */
+  fleetSpeed: number;
   /** Fração padrão de envio (0..1). */
   readonly sendDefault: number;
   /** Largura do mundo lógico da sim (independe da tela). */

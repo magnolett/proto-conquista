@@ -63,6 +63,16 @@ export interface UiState {
   readonly sendRatio: number;
   /** Pausado? */
   readonly paused: boolean;
+  /** Dados do overlay de debug (undefined = oculto). */
+  readonly debug?: DebugOverlayData;
+}
+
+/** Dados que o overlay de debug precisa (FPS e diais vêm da UI; métricas saem do state). */
+export interface DebugOverlayData {
+  readonly visible: boolean;
+  readonly fps: number;
+  readonly dials: ReadonlyArray<{ readonly name: string; readonly value: number }>;
+  readonly dialIndex: number;
 }
 
 function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number): void {
@@ -216,7 +226,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
   ctx.fillStyle = 'rgba(234,242,255,0.55)';
   ctx.font = '12px system-ui,Arial';
   ctx.fillText(
-    'arraste base sua → enviar  |  caixa + clique = multi-envio  |  [1-4] força  [U] upgrade  [Espaço] pausa  [R] nova seed  [Shift+R] mesma seed  [G] dificuldade',
+    'arraste base sua → enviar  |  caixa + clique = multi-envio  |  [1-4] força  [U] upgrade  [Espaço] pausa  [R] nova seed  [Shift+R] mesma seed  [G] dificuldade  [O] debug',
     v.screenW / 2,
     v.screenH - 22,
   );
@@ -235,6 +245,54 @@ function drawBanner(ctx: CanvasRenderingContext2D, v: View, s: GameState): void 
   ctx.fillStyle = COL.text;
   ctx.font = '18px system-ui,Arial';
   ctx.fillText('pressione R para uma nova partida', v.screenW / 2, v.screenH / 2 + 30);
+  ctx.restore();
+}
+
+/** Overlay de debug/playtest: FPS, métricas por lado (renda/s), dificuldade, seed e diais. */
+function drawDebugOverlay(ctx: CanvasRenderingContext2D, s: GameState, d: DebugOverlayData): void {
+  const side = (owner: Owner) => {
+    const ns = s.nodes.filter((n) => n.owner === owner);
+    const troops = Math.round(ns.reduce((a, n) => a + n.troops, 0));
+    const income = ns.reduce((a, n) => a + (n.troops < n.cap ? n.prod : 0), 0);
+    const fleets = s.fleets.filter((f) => f.owner === owner).length;
+    return { bases: ns.length, troops, income, fleets };
+  };
+  const you = side('you');
+  const en = side('enemy');
+  const head: string[] = [
+    'FPS ' + d.fps.toFixed(0),
+    'VOCÊ  ' + you.bases + 'b  ' + you.troops + 't  +' + you.income.toFixed(1) + '/s  ' + you.fleets + 'fr',
+    'IA    ' + en.bases + 'b  ' + en.troops + 't  +' + en.income.toFixed(1) + '/s  ' + en.fleets + 'fr',
+    'dificuldade ' + s.difficulty + '   ·   seed ' + s.seed,
+    '— diais ([Tab] sel · [-]/[=] ajusta) —',
+  ];
+  const lineH = 16;
+  const pad = 8;
+  const x = 16;
+  const y = 44;
+  const w = 256;
+  const h = pad * 2 + (head.length + d.dials.length) * lineH;
+  ctx.save();
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.font = '12px ui-monospace,Consolas,monospace';
+  ctx.fillStyle = 'rgba(5,10,22,0.82)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(120,160,255,0.25)';
+  ctx.strokeRect(x, y, w, h);
+  let row = 0;
+  for (const ln of head) {
+    ctx.fillStyle = 'rgba(234,242,255,0.82)';
+    ctx.fillText(ln, x + pad, y + pad + row * lineH);
+    row++;
+  }
+  for (let i = 0; i < d.dials.length; i++) {
+    const dl = d.dials[i]!;
+    const sel = i === d.dialIndex;
+    ctx.fillStyle = sel ? COL.you : 'rgba(234,242,255,0.7)';
+    ctx.fillText((sel ? '> ' : '  ') + dl.name + ' = ' + dl.value, x + pad, y + pad + row * lineH);
+    row++;
+  }
   ctx.restore();
 }
 
@@ -263,5 +321,6 @@ export function render(
     ctx.restore();
   }
   drawHUD(ctx, v, s, ui);
+  if (ui.debug?.visible) drawDebugOverlay(ctx, s, ui.debug);
   if (s.gameOver) drawBanner(ctx, v, s);
 }
