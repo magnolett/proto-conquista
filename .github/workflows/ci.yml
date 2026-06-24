@@ -29,6 +29,8 @@ jobs:
       - name: Configura Pages
         if: github.ref == 'refs/heads/master'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Sobe artefato do Pages
         if: github.ref == 'refs/heads/master'
         uses: actions/upload-pages-artifact@v3
