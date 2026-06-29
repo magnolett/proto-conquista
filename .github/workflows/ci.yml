@@ -5,7 +5,18 @@ name: CI & Deploy
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+# Cancela runs obsoletos em PR (não cancela master p/ não abortar deploy do Pages).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -15,6 +26,7 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # lê packageManager (pnpm@9.15.9) do package.json
