@@ -39,6 +39,15 @@ Entrega por fases; cada fase é jogável e fecha um risco. Ordem pensada pra **p
 
 **Entregue:** 93 testes (52 novos: obra, interceptação, personas, coordenação, canhão/geometria, waypoint, domínio, crescimento, atrito, **smoke de partida completa anti-stall**). **Critério de saída (pendente, humano):** cada mecânica percebida em jogo; 3+ partidas seguidas com decisões *diferentes*; dificuldades e personas distinguíveis às cegas.
 
+## F4-lite — Iteração 2 de profundidade ✅ *(2026-07-06, pós-playtest: "segue simples")*
+
+**Feedback do playtest:** névoa bugada/ruim → **REMOVIDA** (corte consciente); o loop ativo do jogador ainda era pequeno (selecionar→enviar→U). Três adições que mudam a NATUREZA das decisões:
+1. **Mapa denso com layouts** (`MAPGEN`): ~17 nós e formato sorteado por seed (classic/lanes/flanks) — mais frentes, geometria como estratégia.
+2. **Rotas de suprimento** (`ROUTE`, botão direito): rede logística automática e CORTÁVEL — menos spam de clique, mais decisão estrutural.
+3. **Doutrinas** (`DOCTRINES`, menu `[1/2/3]` + `[Q]`): poder ativo com cooldown (Blitz/Muralha/Mobilização); a IA usa o da persona pela mesma regra. Identidade de build + timing.
+
+Calibração por sonda self-play: Mobilização dominava (76%) → nerfada; mediana de partida IA×IA subiu p/ ~1:24 (arco ✓). Ver [balance-notes](balance-notes-2026-07-06.md).
+
 ## F3 — Apresentação e entrega — *quase completa (2026-07-06)*
 
 **Escopo:** build de produção ✅, deploy web estático ✅ ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/), automático no push), **sons sintetizados Web Audio ✅** (envio/interceptação/captura/obra/alarme de domínio/fim — zero asset, mute `M` persistido, honestos com a névoa: só soa o que você veria), **menu inicial ✅** (mapa congelado ao fundo; clique/Espaço começa; `G`/`R`/`M` no menu) e **onboarding ✅** (4 dicas contextuais só na primeira partida, persistido).

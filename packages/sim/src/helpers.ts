@@ -1,4 +1,4 @@
-import { TIERS, upgradeCost, BASE_KINDS, SCORE, UPGRADE } from '@conquista/shared';
+import { TIERS, upgradeCost, BASE_KINDS, SCORE, UPGRADE, DOCTRINES } from '@conquista/shared';
 import type { BaseKind, Owner } from '@conquista/shared';
 import type { Node, Fleet, GameState, Zone } from './types.js';
 
@@ -129,14 +129,19 @@ export function effectiveDmgMul(n: Node): number {
  * Mesma cor = reforço (soma, pode passar do cap). Cor diferente = ataque:
  * subtrai; se a defesa fica negativa, a base VIRA com o excedente.
  * F2.5: base em obra toma dano ampliado, e a captura CANCELA a obra.
+ * F4-lite: `defDoctrineMul` = redução da doutrina Muralha do DEFENSOR (1 = sem).
  * Retorna o desfecho (o step usa p/ emitir FxEvent — F3).
  */
-export function resolveArrival(f: Fleet, tn: Node): 'reinforced' | 'defended' | 'captured' {
+export function resolveArrival(
+  f: Fleet,
+  tn: Node,
+  defDoctrineMul = 1,
+): 'reinforced' | 'defended' | 'captured' {
   if (tn.owner === f.owner) {
     tn.troops += f.count;
     return 'reinforced';
   }
-  const dmg = f.count * effectiveDmgMul(tn);
+  const dmg = f.count * effectiveDmgMul(tn) * defDoctrineMul;
   tn.troops -= dmg;
   if (tn.troops < 0) {
     tn.owner = f.owner;
@@ -184,6 +189,28 @@ export function finishUpgrade(n: Node): void {
   n.pulse = 1;
 }
 
+/** Multiplicador da doutrina ATIVA de um lado (F4-lite; 1 quando inativa/neutro). */
+export function doctrineMul(
+  state: GameState,
+  owner: Owner,
+  key: 'fleetSpeedMul' | 'dmgTakenMul' | 'prodMul',
+): number {
+  if (owner !== 'you' && owner !== 'enemy') return 1;
+  const d = state.doctrines[owner];
+  return d.activeLeft > 0 ? DOCTRINES[d.id][key] : 1;
+}
+
+/** Ativa a doutrina do lado, se pronta (input do jogador e IA — F4-lite). */
+export function activateDoctrine(state: GameState, owner: 'you' | 'enemy'): boolean {
+  const d = state.doctrines[owner];
+  if (d.activeLeft > 0 || d.cooldownLeft > 0) return false;
+  const cfg = DOCTRINES[d.id];
+  d.activeLeft = cfg.duration;
+  d.cooldownLeft = cfg.duration + cfg.cooldown; // o relógio do cooldown inclui a duração
+  state.fx.push({ kind: 'doctrine', x: 0, y: 0, owner });
+  return true;
+}
+
 /**
  * Multiplicador de velocidade no ponto (x,y): produto das zonas que o contêm (F2).
  * Sem zonas — ou nenhuma contendo o ponto — ⇒ 1 (sem efeito). Função pura.
@@ -217,30 +244,3 @@ export function computeScore(state: GameState, owner: Owner): number {
   return Math.round(bases * SCORE.baseW + troops + tierSum * SCORE.tierW);
 }
 
-/**
- * Ids dos nós VISÍVEIS ao jogador (F2 — névoa de guerra): suas bases são sempre
- * visíveis; as demais só se estiverem a até `sightRadius` de uma base ou frota sua.
- * Função pura (não muta) — afeta só a apresentação, nunca a regra/IA.
- */
-export function visibleNodeIds(state: GameState, sightRadius: number): Set<number> {
-  const r2 = sightRadius * sightRadius;
-  const sources: Array<{ x: number; y: number }> = [];
-  for (const n of state.nodes) if (n.owner === 'you') sources.push({ x: n.x, y: n.y });
-  for (const f of state.fleets) if (f.owner === 'you') sources.push({ x: f.x, y: f.y });
-  const vis = new Set<number>();
-  for (const n of state.nodes) {
-    if (n.owner === 'you') {
-      vis.add(n.id);
-      continue;
-    }
-    for (const s of sources) {
-      const dx = n.x - s.x;
-      const dy = n.y - s.y;
-      if (dx * dx + dy * dy <= r2) {
-        vis.add(n.id);
-        break;
-      }
-    }
-  }
-  return vis;
-}

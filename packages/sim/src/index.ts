@@ -1,10 +1,30 @@
-import { CFG, BASE_KINDS, ENGAGE, PERSONA_ORDER, CORE, NEUTRAL, SUPPLY } from '@conquista/shared';
-import type { Config, Difficulty, AIPersona } from '@conquista/shared';
+import {
+  CFG,
+  BASE_KINDS,
+  ENGAGE,
+  PERSONA_ORDER,
+  CORE,
+  NEUTRAL,
+  SUPPLY,
+  ROUTE,
+  DOCTRINES,
+  DOCTRINE_ORDER,
+} from '@conquista/shared';
+import type { Config, Difficulty, AIPersona, DoctrineId, Owner } from '@conquista/shared';
 import type { GameState, Node, Inputs } from './types.js';
 import { NO_INPUTS } from './types.js';
 import { seedToState, nextRng } from './prng.js';
 import { generateMap } from './mapgen.js';
-import { resolveArrival, spawnFleet, upgradeNode, finishUpgrade, zoneMulAt, hyp } from './helpers.js';
+import {
+  resolveArrival,
+  spawnFleet,
+  upgradeNode,
+  finishUpgrade,
+  zoneMulAt,
+  hyp,
+  doctrineMul,
+  activateDoctrine,
+} from './helpers.js';
 import { aiThink, effectiveAI } from './ai.js';
 
 export type {
@@ -14,6 +34,8 @@ export type {
   Inputs,
   SendOrder,
   UpgradeOrder,
+  RouteOrder,
+  DoctrineState,
   Zone,
   FxEvent,
 } from './types.js';
@@ -32,8 +54,9 @@ export {
   effectiveDmgMul,
   segmentCircleChord,
   zoneMulAt,
-  visibleNodeIds,
   computeScore,
+  doctrineMul,
+  activateDoctrine,
 } from './helpers.js';
 export { aiThink, effectiveAI } from './ai.js';
 
@@ -46,6 +69,16 @@ export interface CreateOptions {
    * Nota: fixar a persona pula um saque do PRNG — replays devem fixar a MESMA opção.
    */
   readonly persona?: AIPersona;
+  /** Doutrina do JOGADOR (F4-lite; escolhida no menu). Default 'blitz'. */
+  readonly doctrineYou?: DoctrineId;
+}
+
+/** Doutrina da IA pela persona: a identidade estratégica escolhe o poder. */
+export function doctrineForPersona(persona: AIPersona, roll: number): DoctrineId {
+  if (persona === 'rusher') return 'blitz';
+  if (persona === 'turtle') return 'bulwark';
+  if (persona === 'boomer') return 'surge';
+  return DOCTRINE_ORDER[Math.floor(roll * DOCTRINE_ORDER.length)]!; // equilibrada sorteia
 }
 
 /**
@@ -56,7 +89,7 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
   const config = opts.config ?? CFG;
   const difficulty: Difficulty = opts.difficulty ?? 'normal';
   const map = generateMap(seedToState(seed), config);
-  const { nodes, zones } = map;
+  const { nodes, zones, layout } = map;
   let rng = map.rng;
   // Persona da IA (F2.5): sorteio determinístico pós-mapa; easy fica previsível.
   let persona: AIPersona = opts.persona ?? 'balanced';
@@ -65,6 +98,10 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
     rng = r.state;
     persona = PERSONA_ORDER[Math.floor(r.value * PERSONA_ORDER.length)]!;
   }
+  // Doutrina da IA (F4-lite): identidade da persona; a equilibrada sorteia.
+  const dRoll = nextRng(rng);
+  rng = dRoll.state;
+  const enemyDoctrine = doctrineForPersona(persona, dRoll.value);
   return {
     nodes,
     fleets: [],
@@ -82,8 +119,14 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
     fx: [],
     coreHold: { owner: null, held: 0 },
     winReason: null,
+    doctrines: {
+      you: { id: opts.doctrineYou ?? 'blitz', activeLeft: 0, cooldownLeft: 0 },
+      enemy: { id: enemyDoctrine, activeLeft: 0, cooldownLeft: 0 },
+    },
+    layout,
   };
 }
+
 
 /**
  * Aplica as ordens do JOGADOR resolvidas pelo input (sends + upgrades).
@@ -110,6 +153,21 @@ function applyInputs(state: GameState, inputs: Inputs): void {
     const n = nodes[order.nodeId];
     if (n && n.owner === 'you') upgradeNode(n, order.kind);
   }
+
+  // Rotas de suprimento (F4-lite): liga/desliga o fluxo automático de uma base sua.
+  for (const order of inputs.routes ?? []) {
+    const from = nodes[order.fromId];
+    if (!from || from.owner !== 'you') continue;
+    if (order.toId === null || order.toId === order.fromId || !nodes[order.toId]) {
+      from.routeTo = undefined;
+      from.routeTimer = undefined;
+    } else {
+      from.routeTo = order.toId;
+      from.routeTimer = 0; // primeiro despacho imediato (feedback na hora)
+    }
+  }
+
+  if (inputs.doctrine) activateDoctrine(state, 'you');
 }
 
 /** Verifica vitória/derrota (porte de checkWin). */
@@ -158,7 +216,15 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
 
   state.time += dt;
 
+  // 0.5) Relógios das doutrinas (F4-lite): efeito e cooldown escoam com o tempo.
+  for (const side of ['you', 'enemy'] as const) {
+    const d = state.doctrines[side];
+    if (d.activeLeft > 0) d.activeLeft = Math.max(0, d.activeLeft - dt);
+    if (d.cooldownLeft > 0) d.cooldownLeft = Math.max(0, d.cooldownLeft - dt);
+  }
+
   // 1) Economia + pulse + obras (F2.5: base em obra NÃO produz; obra avança e conclui).
+  //    F4-lite: doutrina 'Mobilização' multiplica a produção do lado enquanto ativa.
   for (const n of state.nodes) {
     n.underAttack = false;
     if (n.pulse > 0) n.pulse = Math.max(0, n.pulse - dt * 1.5);
@@ -169,11 +235,37 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
         state.fx.push({ kind: 'upgraded', x: n.x, y: n.y, owner: n.owner });
       }
     } else if (n.owner !== 'neutral' && n.troops < n.cap) {
-      n.troops = Math.min(n.cap, n.troops + n.prod * dt);
+      const mul = doctrineMul(state, n.owner, 'prodMul');
+      n.troops = Math.min(n.cap, n.troops + n.prod * mul * dt);
     } else if (n.owner === 'neutral' && NEUTRAL.growthRate > 0) {
       // F2.5: neutras engordam devagar até min(cap, growthCap) — esperar custa.
       const ceil = Math.min(n.cap, NEUTRAL.growthCap);
       if (n.troops < ceil) n.troops = Math.min(ceil, n.troops + NEUTRAL.growthRate * dt);
+    }
+  }
+
+  // 1.2) Rotas de suprimento (F4-lite): a origem despacha excedente periodicamente
+  //      para o destino ALIADO. Pausa durante obra; destino perdido mata a rota.
+  //      A frota criada é NORMAL: viaja, engaja, sofre atrito — a rede é cortável.
+  if (ROUTE.interval > 0) {
+    for (const n of state.nodes) {
+      if (n.routeTo === undefined) continue;
+      const to = state.nodes[n.routeTo];
+      if (!to || to.owner !== n.owner) {
+        n.routeTo = undefined;
+        n.routeTimer = undefined;
+        continue;
+      }
+      if (n.upgrading) continue; // obra consome a base: fluxo pausado
+      n.routeTimer = (n.routeTimer ?? 0) - dt;
+      if (n.routeTimer <= 0) {
+        n.routeTimer = ROUTE.interval;
+        const surplus = Math.floor((n.troops - ROUTE.keep) * ROUTE.ratio);
+        if (surplus >= 1) {
+          n.troops -= surplus;
+          spawnFleet(state, n, to, n.owner, surplus);
+        }
+      }
     }
   }
 
@@ -208,7 +300,11 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
     const dy = aim.y - f.y;
     const d = hyp(dx, dy) || 0.0001;
     const stepLen =
-      state.config.fleetSpeed * (f.speedMul ?? 1) * zoneMulAt(f.x, f.y, state.zones) * dt;
+      state.config.fleetSpeed *
+      (f.speedMul ?? 1) *
+      doctrineMul(state, f.owner, 'fleetSpeedMul') * // Blitz (F4-lite)
+      zoneMulAt(f.x, f.y, state.zones) *
+      dt;
     if (f.waypoint) {
       if (d <= stepLen + 2) {
         f.x = f.waypoint.x;
@@ -220,7 +316,8 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
       }
       survivors.push(f);
     } else if (d <= stepLen + tn.radius * 0.4) {
-      if (resolveArrival(f, tn) === 'captured') {
+      // Muralha (F4-lite): a doutrina do DEFENSOR reduz o dano enquanto ativa.
+      if (resolveArrival(f, tn, doctrineMul(state, tn.owner, 'dmgTakenMul')) === 'captured') {
         state.fx.push({ kind: 'capture', x: tn.x, y: tn.y, owner: tn.owner });
       }
     } else {
@@ -361,5 +458,10 @@ export function cloneState(state: GameState): GameState {
     fx: state.fx.map((e) => ({ ...e })),
     coreHold: { ...state.coreHold },
     winReason: state.winReason,
+    doctrines: {
+      you: { ...state.doctrines.you },
+      enemy: { ...state.doctrines.enemy },
+    },
+    layout: state.layout,
   };
 }

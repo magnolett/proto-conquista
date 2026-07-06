@@ -1,7 +1,15 @@
 import { DIFFICULTY, PERSONAS, AI_TUNING, BASE_KINDS, SUPPLY, upgradeCost } from '@conquista/shared';
 import type { BaseKind, Difficulty, AIPersona } from '@conquista/shared';
 import type { GameState, Node } from './types.js';
-import { dist, hyp, spawnFleet, upgradeNode, effectiveDmgMul, segmentCircleChord } from './helpers.js';
+import {
+  dist,
+  hyp,
+  spawnFleet,
+  upgradeNode,
+  effectiveDmgMul,
+  segmentCircleChord,
+  activateDoctrine,
+} from './helpers.js';
 import { nextRng } from './prng.js';
 
 /** Lado jogável pela IA (self-play usa 'you'; o jogo real usa o default 'enemy'). */
@@ -261,6 +269,27 @@ export function aiThink(
       .sort((a, b) => a.tier - b.tier)[0];
     if (safe) upgradeNode(safe, chooseUpgradeKind(state, safe, foe));
   }
+
+  // 4) DOUTRINA (F4-lite): ativa o próprio poder no momento em que ele rende —
+  //    Blitz com ataque no ar, Muralha com onda hostil vindo, Mobilização em paz.
+  maybeDoctrine(state, owner, foe);
+}
+
+/** Heurística determinística de ativação da doutrina da IA (mesma regra p/ todos). */
+function maybeDoctrine(state: GameState, owner: AISide, foe: AISide): void {
+  const d = state.doctrines[owner];
+  if (d.activeLeft > 0 || d.cooldownLeft > 0) return;
+  let inbound = 0; // tropas hostis a caminho de bases do lado
+  let outbound = 0; // tropas do lado em voo de ATAQUE (alvo não-aliado)
+  for (const f of state.fleets) {
+    const t = state.nodes[f.target];
+    if (!t) continue;
+    if (f.owner === foe && t.owner === owner) inbound += f.count;
+    if (f.owner === owner && t.owner !== owner) outbound += f.count;
+  }
+  if (d.id === 'blitz' && outbound >= 25) activateDoctrine(state, owner);
+  else if (d.id === 'bulwark' && inbound >= 22) activateDoctrine(state, owner);
+  else if (d.id === 'surge' && inbound < 8) activateDoctrine(state, owner);
 }
 
 /**

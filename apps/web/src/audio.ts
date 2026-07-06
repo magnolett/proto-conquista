@@ -14,6 +14,7 @@ export type SfxKind =
   | 'captureEnemy'
   | 'reinforce'
   | 'upgraded'
+  | 'doctrine'
   | 'coreTick'
   | 'win'
   | 'lose';
@@ -39,6 +40,7 @@ const COOLDOWN: Record<SfxKind, number> = {
   captureEnemy: 120,
   reinforce: 90,
   upgraded: 150,
+  doctrine: 400,
   coreTick: 700,
   win: 1000,
   lose: 1000,
@@ -148,6 +150,9 @@ export function sfx(kind: SfxKind): void {
       break;
     case 'upgraded':
       tone('triangle', 660, 880, 0.15, 0.12);
+      break;
+    case 'doctrine':
+      tone('triangle', 220, 660, 0.28, 0.14); // sweep de "poder ligado"
       break;
     case 'coreTick':
       tone('square', 880, 880, 0.05, 0.09);

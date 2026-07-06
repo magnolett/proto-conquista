@@ -1,4 +1,12 @@
-import type { Owner, Difficulty, Config, BaseKind, AIPersona } from '@conquista/shared';
+import type {
+  Owner,
+  Difficulty,
+  Config,
+  BaseKind,
+  AIPersona,
+  DoctrineId,
+  MapLayout,
+} from '@conquista/shared';
 
 /**
  * Base (nó do grafo). Tudo que a sim precisa p/ economia, combate e IA.
@@ -30,6 +38,13 @@ export interface Node {
   upgrading?: { kind: BaseKind; remaining: number; total: number } | undefined;
   /** Fortaleza central (F2.5): segurá-la por CORE.holdSeconds vence por DOMÍNIO. */
   isCore?: boolean;
+  /**
+   * Rota de suprimento (F4-lite): id do destino ALIADO p/ onde esta base envia
+   * excedente periodicamente. Pausa em obra; morre se o destino trocar de dono.
+   */
+  routeTo?: number | undefined;
+  /** Contador regressivo até o próximo envio da rota (s). */
+  routeTimer?: number | undefined;
 }
 
 /** Frota em trânsito. */
@@ -55,11 +70,20 @@ export interface Fleet {
  * a sim limpa e repõe a cada passo. É DADO de simulação (o que aconteceu), não regra.
  */
 export interface FxEvent {
-  readonly kind: 'engage' | 'capture' | 'upgraded';
+  readonly kind: 'engage' | 'capture' | 'upgraded' | 'doctrine';
   readonly x: number;
   readonly y: number;
-  /** Quem protagonizou (capturou/terminou a obra). Ausente p/ 'engage'. */
+  /** Quem protagonizou (capturou/terminou a obra/ativou a doutrina). */
   readonly owner?: Owner;
+}
+
+/** Estado da doutrina de um lado (F4-lite): qual é, quanto resta, quanto falta. */
+export interface DoctrineState {
+  id: DoctrineId;
+  /** Segundos restantes do EFEITO (0 = inativa). */
+  activeLeft: number;
+  /** Segundos até poder ativar de novo (0 = pronta). */
+  cooldownLeft: number;
 }
 
 /** Zona modificadora de mapa (F2): multiplica a velocidade da frota dentro do raio. */
@@ -104,6 +128,10 @@ export interface GameState {
   coreHold: { owner: Owner | null; held: number };
   /** Como a partida terminou (null enquanto roda). */
   winReason: 'elimination' | 'core' | null;
+  /** Doutrinas dos dois lados (F4-lite): poder ativo com duração/cooldown. */
+  doctrines: { you: DoctrineState; enemy: DoctrineState };
+  /** Formato do mapa sorteado por seed (informativo p/ HUD/debug). */
+  layout: MapLayout;
 }
 
 /**
@@ -125,6 +153,12 @@ export interface UpgradeOrder {
   readonly kind?: BaseKind;
 }
 
+/** Pedido de rota de suprimento (F4-lite): toId null REMOVE a rota da origem. */
+export interface RouteOrder {
+  readonly fromId: number;
+  readonly toId: number | null;
+}
+
 /**
  * Inputs do jogador para UM step. A sim é a verdade: a render só preenche isto.
  * `dt` é injetado separadamente em step(state, inputs, dt).
@@ -132,6 +166,9 @@ export interface UpgradeOrder {
 export interface Inputs {
   readonly sends?: readonly SendOrder[];
   readonly upgrades?: readonly UpgradeOrder[];
+  readonly routes?: readonly RouteOrder[];
+  /** Ativa a doutrina do jogador neste step (tecla Q), se pronta. */
+  readonly doctrine?: boolean;
 }
 
 /** Inputs vazios reutilizáveis. */

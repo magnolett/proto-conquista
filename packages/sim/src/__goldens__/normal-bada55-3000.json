@@ -1,16 +1,16 @@
 {
-  "hash": "ac1ceaaa",
+  "hash": "be608fae",
   "summary": {
-    "time": "43.0667",
-    "persona": "rusher",
-    "winner": "enemy",
-    "winReason": "elimination",
-    "rng": 3220212536,
+    "time": "50.0000",
+    "persona": "balanced",
+    "winner": null,
+    "winReason": null,
+    "rng": 2486554169,
     "fleets": 0,
     "owners": {
-      "you": 0,
+      "you": 1,
       "enemy": 4,
-      "neutral": 7
+      "neutral": 12
     }
   }
 }

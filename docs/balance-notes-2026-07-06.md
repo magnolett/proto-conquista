@@ -32,6 +32,26 @@ no 1º all-in coordenado, e a partida acabava antes de qualquer mecânica tardia
 - **10/160 stalls** são espelhos defensivos IA×IA (turtle/boomer dos dois lados); vs jogador
   passivo a IA SEMPRE fecha (garantido por `match.test.ts`). Aceitável.
 
+## Iteração 2 (mesma data, pós-playtest do dono: "segue simples")
+
+Mudanças de jogo: **névoa REMOVIDA** (bugada/ruim no playtest) · **mapa denso** (7 pares de
+neutras + 3 layouts por seed) · **rotas de suprimento** · **doutrinas** (poder ativo Q).
+
+- **Mediana de partida IA×IA: 0:48 → ~1:24** — o mapa denso finalmente deu ARCO. ✓
+- Sonda doutrina×doutrina (espelho, 16 seeds/célula): **Mobilização dominava (76% média)**
+  → nerf 1.9→1.5 prod / cd 50→55; Blitz era a mais fraca → buff 1.45→1.6. Pós-ajuste:
+  linhas ~29/37/51% (surge ainda a melhor, aceitável — humano escolhe).
+- **O "sanity de dificuldades" IA×IA PERDEU significado** no meta denso: doutrina/persona
+  pesam mais que aiTick entre heurísticas. Dificuldade diferencia contra HUMANOS
+  (tempo de reação), não entre IAs. Não perseguir esse número.
+- Stalls ~10% em espelhos defensivos IA×IA (aceitável; `match.test.ts` garante que a IA
+  fecha contra jogador passivo). Domínio segue não decidindo em IA×IA (as IAs disputam o
+  centro cedo demais p/ 35s contínuos) — a mecânica mira humano entrincheirado; validar
+  em playtest antes de mexer.
+- Turtle virou a persona mais forte no mapa denso (60-68%): boom+contra-ataque escala
+  melhor que rush quando há muito o que colonizar. Observar no playtest humano; se
+  confirmar, suavizar expandForceMul dela.
+
 ## Processo p/ a próxima calibração
 
 1. Jogar de verdade (isso aqui não substitui playtest).

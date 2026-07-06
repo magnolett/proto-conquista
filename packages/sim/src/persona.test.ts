@@ -30,6 +30,11 @@ function makeState(
     fx: [],
     coreHold: { owner: null, held: 0 },
     winReason: null,
+    doctrines: {
+      you: { id: 'blitz', activeLeft: 0, cooldownLeft: 0 },
+      enemy: { id: 'blitz', activeLeft: 0, cooldownLeft: 0 },
+    },
+    layout: 'classic',
   };
 }
 

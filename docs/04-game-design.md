@@ -35,12 +35,17 @@ Produzir → decidir (expandir / reforçar / atacar / evoluir) → enviar frota 
 - **Upgrade é OBRA:** paga agora, evolui após `timePerTier×nível` s; durante a obra a produção PARA, o canhão cala e a base toma dano ampliado (escudo perde a proteção); captura no meio **cancela o investimento**. Atacar quem evolui é jogar bem.
 - **Especialização escolhida:** ao evoluir, o dono escolhe a vocação — `U` mantém, `Z` escudo, `X` veloz, `C` canhão. Capturar neutra especial é o atalho barato; construir é o caminho caro e seguro.
 - **Interceptação em trânsito:** frotas de donos diferentes que se cruzam brigam no ar — a menor morre, a maior segue com a diferença. Cortar reforço, escoltar e defender ativamente existem; "defesa+ε" deixou de ser garantia.
-- **Névoa por PADRÃO + memória:** o mapa fora da sua visão mostra a **última informação vista** (esmaecida), não a verdade; nunca visto = `?`. Scouting com frota de 1 tropa é decisão real.
+- ~~Névoa de guerra~~ — **REMOVIDA (playtest 2026-07-06)**: implementação confusa/bugada e ruim de jogar; informação aberta é o padrão Galcon. Corte consciente.
 - **Waypoint (Shift no arrasto):** fixa um ponto de passagem — flanquear canhão pagando distância, surfar estrada, evitar lamaçal.
 - **Domínio do centro:** segurar a fortaleza central por `CORE.holdSeconds` contínuos **vence a partida** (anel de progresso no mapa). O meio do mapa é obrigatório.
 - **Neutras crescem** devagar até um teto: expandir cedo é mais barato que expandir depois.
 - **Atrito de suprimento:** frota a mais de `SUPPLY.range` de qualquer base sua definha — ataques profundos exigem bases-ponte (logística é estratégia).
 - **IA com personas** (sorteada por seed; revelada só no placar): **agressiva** (rush, anti-jogador), **econômica** (upa e expande), **defensiva** (segura e contra-ataca em massa), **equilibrada**. Personas coordenadas (e o hard sempre) fazem **all-in combinado** quando nenhum alvo é tomável sozinho; a IA também **penaliza rotas sob canhão e flanqueia com waypoint** — e caça bases em obra.
+
+### Profundidade F4-lite (implementada 2026-07-06 — iteração 2 pós-playtest)
+- **Mapa DENSO com layouts** (`MAPGEN`): ~7 pares de neutras (17 nós) e formato sorteado por seed — *classic* (espalhado), *lanes* (corredor entre as capitais), *flanks* (alas norte/sul, miolo vazio). Mais frentes simultâneas; a geometria muda a partida.
+- **Rotas de suprimento** (`ROUTE`, botão DIREITO arrastado): a origem envia automaticamente parte do excedente ao destino aliado a cada ciclo — o jogo vira desenhar uma REDE logística; a frota da rota é normal (viaja, engaja, sofre atrito) e o inimigo pode CORTÁ-LA. Botão direito na própria base/no vazio remove; obra pausa o fluxo; destino perdido mata a rota.
+- **Doutrinas** (`DOCTRINES`, escolha no menu `[1/2/3]`, ativação `[Q]`): poder temporário com cooldown — **Blitz** (frotas +60% por 8s), **Muralha** (bases −45% de dano por 6s), **Mobilização** (produção +50% por 8s). A IA usa a doutrina da persona pela mesma regra (agressiva=Blitz, defensiva=Muralha, econômica=Mobilização) e ativa no momento certo (ataque no ar / onda vindo / paz). Timing de "ult" + leitura do poder inimigo (alarme no HUD quando a IA ativa).
 
 ## Tensões estratégicas (de onde vem a profundidade)
 
@@ -63,7 +68,8 @@ Gerado por partida, **espelhado por simetria de ponto** (partida justa): sua bas
 - Custo de upgrade: **20 × tier**. Base inicial: **26 tropas** (sobrevive ao 1º all-in).
 - **F2 — tipos:** escudo dano ×0,6 · veloz ×1,6 · canhão alcance 110 / 6 dps. **Mapa:** estrada ×1,5 · lamaçal ×0,6. **Névoa:** raio 230. **Placar:** base×100 · tier×50.
 - **F2.5 — obra:** 6 s/nível · vulnerabilidade ×1,3. **Interceptação:** raio 16. **Domínio:** 35 s. **Neutras:** +0,12/s até 40. **Atrito:** 2%/s além de 430 px. **IA:** defesa 0,82 · dreno 0,6 · pesos buildTarget 30 / core 45 / canhão 1,0 / suprimento 0,08 · personas em `PERSONAS`.
-- Valores pós **calibração por self-play** (`pnpm balance`): ver [balance-notes-2026-07-06](balance-notes-2026-07-06.md) — spread de personas 36–58%, hard×easy 71%, refino final é playtest humano.
+- **F4-lite — mapa:** 7 pares de neutras · minDist 104 · 3 pares de zonas. **Rota:** ciclo 3,5 s · 35% do excedente · reserva 12. **Doutrinas:** Blitz ×1,6/8s/cd45 · Muralha ×0,55/6s/cd45 · Mobilização ×1,5/8s/cd55.
+- Valores pós **calibração por self-play** (`pnpm balance` + sondas): ver [balance-notes-2026-07-06](balance-notes-2026-07-06.md) — mediana de partida ~1:24 (tinha arco?✓), Mobilização nerfada de 76% de winrate, refino final é playtest humano.
 
 > **Tudo provisório.** Calibração é trabalho de playtest (humano) — ajustar os diais em `packages/shared` (`CFG`/`TIERS`/`BASE_KINDS`/`MAP_MODS`/…) ou em runtime no overlay (`O` + `Tab`/`-`/`=`).
 

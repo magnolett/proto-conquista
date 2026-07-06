@@ -76,6 +76,30 @@ export interface PersonaConfig {
 export type BaseKind = 'normal' | 'cannon' | 'shield' | 'fast';
 
 /**
+ * Doutrina (F4-lite): poder ATIVO escolhido por partida (jogador no menu; IA
+ * pela persona). Tecla Q ativa; efeito temporário com cooldown.
+ */
+export type DoctrineId = 'blitz' | 'bulwark' | 'surge';
+
+/** Parâmetros de uma doutrina (multiplicadores valem SÓ enquanto ativa). */
+export interface DoctrineConfig {
+  readonly label: string;
+  /** Descrição curta p/ menu/HUD. */
+  readonly hint: string;
+  duration: number;
+  cooldown: number;
+  /** Multiplicador de velocidade das SUAS frotas enquanto ativa (1 = sem efeito). */
+  fleetSpeedMul: number;
+  /** Multiplicador do dano recebido pelas SUAS bases enquanto ativa (<1 protege). */
+  dmgTakenMul: number;
+  /** Multiplicador da SUA produção enquanto ativa (>1 acelera). */
+  prodMul: number;
+}
+
+/** Formato de mapa sorteado por seed (F4-lite): muda a geometria estratégica. */
+export type MapLayout = 'classic' | 'lanes' | 'flanks';
+
+/**
  * Parâmetros de cada tipo de base (os "diais" das especialidades).
  * Valores neutros (mul = 1, range = 0) ⇒ sem efeito — é exatamente o caso de 'normal',
  * o que mantém a regra atual intacta para bases comuns.

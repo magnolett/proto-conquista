@@ -8,6 +8,9 @@ export type {
   BaseKindConfig,
   AIPersona,
   PersonaConfig,
+  DoctrineId,
+  DoctrineConfig,
+  MapLayout,
 } from './types.js';
 
 export {
@@ -18,7 +21,6 @@ export {
   upgradeCost,
   BASE_KINDS,
   MAP_MODS,
-  FOG,
   SCORE,
   UPGRADE,
   AI_TUNING,
@@ -28,4 +30,8 @@ export {
   CORE,
   NEUTRAL,
   SUPPLY,
+  ROUTE,
+  DOCTRINES,
+  DOCTRINE_ORDER,
+  MAPGEN,
 } from './config.js';

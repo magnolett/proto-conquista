@@ -1,7 +1,7 @@
 import type { GameState, Node, Fleet } from '@conquista/sim';
-import { visibleNodeIds, computeScore } from '@conquista/sim';
-import type { Owner, Difficulty, BaseKind } from '@conquista/shared';
-import { DIFFICULTY, BASE_KINDS, FOG, PERSONAS, CORE } from '@conquista/shared';
+import { computeScore } from '@conquista/sim';
+import type { Owner, Difficulty } from '@conquista/shared';
+import { DIFFICULTY, BASE_KINDS, PERSONAS, CORE, DOCTRINES, DOCTRINE_ORDER } from '@conquista/shared';
 
 /** Paleta tática (porte de COL do game.js). */
 export const COL = {
@@ -50,14 +50,6 @@ export function toWorld(v: View, sx: number, sy: number): { x: number; y: number
   return { x: (sx - v.offsetX) / v.scale, y: (sy - v.offsetY) / v.scale };
 }
 
-/** Última visão conhecida de um nó (F2.5 — memória sob névoa). Só apresentação. */
-export interface GhostInfo {
-  readonly owner: Owner;
-  readonly kind: BaseKind;
-  readonly tier: number;
-  readonly troops: number;
-}
-
 /** Estado de UI que a render precisa, mas que NÃO pertence à sim. */
 export interface UiState {
   /** Ids selecionados pelo jogador. */
@@ -68,24 +60,20 @@ export interface UiState {
   readonly dragSourceId: number | null;
   /** Ponto de passagem fixado com Shift durante o arrasto (F2.5), ou null. */
   readonly dragWaypoint?: { x: number; y: number } | null;
+  /** Base de origem de um arrasto de ROTA (botão direito — F4-lite), ou null. */
+  readonly routeDragFrom?: number | null;
   /** Caixa de seleção em coords de MUNDO (ou null). */
   readonly box: { x: number; y: number; w: number; h: number } | null;
   /** Fração de envio atual (0..1). */
   readonly sendRatio: number;
   /** Pausado? */
   readonly paused: boolean;
-  /** Névoa de guerra ligada? (F2 — afeta só a visão do jogador, nunca a sim/IA.) */
-  readonly fog?: boolean;
   /** Som desligado? (F3 — indicador no rodapé.) */
   readonly muted?: boolean;
   /** Tela de MENU ativa? (F3 — o jogo congelado fica ao fundo.) */
   readonly menu?: boolean;
   /** Dica de onboarding ativa (F3), ou null. */
   readonly tip?: string | null;
-  /** Visibilidade já computada pelo main (evita recomputar aqui). */
-  readonly visibleIds?: ReadonlySet<number> | null;
-  /** Memória de última visão por nó (F2.5) — o que a névoa esconde vira lembrança. */
-  readonly ghosts?: ReadonlyMap<number, GhostInfo>;
   /** Ecos de interceptação (F2.5) com idade em s — a UI acumula e esmaece. */
   readonly fx?: ReadonlyArray<{ readonly x: number; readonly y: number; readonly age: number }>;
   /** Dados do overlay de debug (undefined = oculto). */
@@ -278,14 +266,7 @@ function drawKindDecor(
   ctx.restore();
 }
 
-function drawNode(
-  ctx: CanvasRenderingContext2D,
-  v: View,
-  n: Node,
-  selected: boolean,
-  hideCount = false,
-  hideTier = false,
-): void {
+function drawNode(ctx: CanvasRenderingContext2D, v: View, n: Node, selected: boolean): void {
   const c = ownerColor(n.owner);
   const p = toScreen(v, n.x, n.y);
   const r = n.radius * v.scale;
@@ -343,12 +324,10 @@ function drawNode(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = 'bold ' + Math.max(12, Math.floor(r * 0.8)) + 'px system-ui,Segoe UI,Arial';
-  ctx.fillText(hideCount ? '?' : String(Math.floor(n.troops)), p.x, p.y);
-  if (!hideTier) {
-    ctx.fillStyle = 'rgba(234,242,255,0.5)';
-    ctx.font = '10px system-ui,Arial';
-    ctx.fillText('T' + (n.tier + 1), p.x, p.y + r + 12);
-  }
+  ctx.fillText(String(Math.floor(n.troops)), p.x, p.y);
+  ctx.fillStyle = 'rgba(234,242,255,0.5)';
+  ctx.font = '10px system-ui,Arial';
+  ctx.fillText('T' + (n.tier + 1), p.x, p.y + r + 12);
 }
 
 /** Anel + contagem do DOMÍNIO do centro (F2.5): quem segura a fortaleza e quanto falta. */
@@ -430,7 +409,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
   ctx.fillStyle = 'rgba(234,242,255,0.55)';
   ctx.font = '12px system-ui,Arial';
   ctx.fillText(
-    'arraste = enviar (Shift no arrasto fixa DESVIO)  |  caixa+clique = multi-envio  |  [1-4] força  [U] upgrade  [Z/X/C] spec escudo/veloz/canhão  [Espaço] pausa  [R/Shift+R] seed  [G] dificuldade  [F] névoa  [M] som' +
+    'arraste = enviar (Shift fixa DESVIO)  |  botão DIREITO arrastado = ROTA de suprimento  |  caixa+clique = multi-envio  |  [1-4] força  [U/Z/X/C] evoluir  [Q] doutrina  [Espaço] pausa  [R/Shift+R] seed  [G] dificuldade  [M] som' +
       (ui.muted ? ' OFF' : '') +
       '  [O] debug',
     v.screenW / 2,
@@ -530,6 +509,58 @@ function drawDebugOverlay(ctx: CanvasRenderingContext2D, s: GameState, d: DebugO
   ctx.restore();
 }
 
+/** Rotas de suprimento ativas (F4-lite): tracejado animado origem→destino. */
+function drawRoutes(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiState): void {
+  ctx.save();
+  ctx.setLineDash([3, 9]);
+  ctx.lineWidth = 2;
+  ctx.lineDashOffset = -((s.time * 40) % 12);
+  for (const n of s.nodes) {
+    if (n.routeTo === undefined) continue;
+    const to = s.nodes[n.routeTo];
+    if (!to) continue;
+    const a = toScreen(v, n.x, n.y);
+    const b = toScreen(v, to.x, to.y);
+    ctx.strokeStyle = n.owner === 'you' ? 'rgba(57,216,255,0.45)' : 'rgba(255,122,74,0.45)';
+    line(ctx, a.x, a.y, b.x, b.y);
+  }
+  // arrasto de rota em curso (botão direito): guia âmbar até o cursor
+  if (ui.routeDragFrom !== null && ui.routeDragFrom !== undefined) {
+    const n = s.nodes[ui.routeDragFrom];
+    if (n) {
+      const a = toScreen(v, n.x, n.y);
+      const m = toScreen(v, ui.mouseWorld.x, ui.mouseWorld.y);
+      ctx.strokeStyle = 'rgba(255,200,80,0.8)';
+      line(ctx, a.x, a.y, m.x, m.y);
+    }
+  }
+  ctx.restore();
+}
+
+/** HUD da doutrina (F4-lite): a sua no canto; a da IA só quando ATIVA (alarme). */
+function drawDoctrineHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState): void {
+  const d = s.doctrines.you;
+  const cfg = DOCTRINES[d.id];
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.font = 'bold 14px system-ui,Arial';
+  const y = v.screenH - 44;
+  let status: string;
+  if (d.activeLeft > 0) status = 'ATIVA ' + Math.ceil(d.activeLeft) + 's';
+  else if (d.cooldownLeft > 0) status = 'recarrega ' + Math.ceil(d.cooldownLeft) + 's';
+  else status = 'pronta — [Q]';
+  ctx.fillStyle = d.activeLeft > 0 ? COL.you : d.cooldownLeft > 0 ? 'rgba(234,242,255,0.45)' : COL.text;
+  ctx.fillText('⚡ ' + cfg.label + ' · ' + status, 16, y);
+  const e = s.doctrines.enemy;
+  if (e.activeLeft > 0) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = COL.enemy;
+    ctx.fillText('⚡ IA ativou ' + DOCTRINES[e.id].label + '!', v.screenW / 2, 64);
+  }
+  ctx.restore();
+}
+
 /** Dica de onboarding (F3): caixa discreta acima do rodapé. */
 function drawTip(ctx: CanvasRenderingContext2D, v: View, text: string): void {
   ctx.save();
@@ -580,15 +611,26 @@ function drawMenuOverlay(ctx: CanvasRenderingContext2D, v: View, s: GameState): 
     cx,
     cy + 22,
   );
+  // Doutrina escolhida (F4-lite): [1/2/3] seleciona; a atual em destaque.
+  const dSel = s.doctrines.you.id;
+  ctx.font = '14px system-ui,Arial';
+  const dLine = DOCTRINE_ORDER.map(
+    (id, i) => `[${i + 1}] ${DOCTRINES[id].label}${id === dSel ? ' ✓' : ''}`,
+  ).join('   ·   ');
+  ctx.fillStyle = COL.you;
+  ctx.fillText('Doutrina: ' + dLine, cx, cy + 48);
+  ctx.fillStyle = 'rgba(234,242,255,0.65)';
+  ctx.font = '12px system-ui,Arial';
+  ctx.fillText('(' + DOCTRINES[dSel].hint + ' — ative com [Q] durante a partida)', cx, cy + 68);
   ctx.fillStyle = 'rgba(234,242,255,0.6)';
   ctx.font = '13px system-ui,Arial';
   const lines = [
     'arraste de uma base sua = enviar tropas · caixa + clique = várias de uma vez',
-    'Shift durante o arrasto fixa um DESVIO na rota · [1-4] força do envio',
+    'Shift durante o arrasto fixa um DESVIO · botão DIREITO arrastado = ROTA de suprimento',
     '[U] evoluir (obra vulnerável!) · [Z/X/C] evoluir como escudo / veloz / canhão',
-    'vença ELIMINANDO a IA ou DOMINANDO a fortaleza central · [F] névoa · [O] diais',
+    'vença ELIMINANDO a IA ou DOMINANDO a fortaleza central · [O] diais de playtest',
   ];
-  lines.forEach((ln, i) => ctx.fillText(ln, cx, cy + 62 + i * 22));
+  lines.forEach((ln, i) => ctx.fillText(ln, cx, cy + 100 + i * 22));
   ctx.restore();
 }
 
@@ -611,38 +653,6 @@ function drawFx(
   ctx.restore();
 }
 
-/** Fontes de visão do jogador (F2 — névoa): centro de cada base/frota sua. */
-function visionSources(s: GameState): Array<{ x: number; y: number }> {
-  const out: Array<{ x: number; y: number }> = [];
-  for (const n of s.nodes) if (n.owner === 'you') out.push({ x: n.x, y: n.y });
-  for (const f of s.fleets) if (f.owner === 'you') out.push({ x: f.x, y: f.y });
-  return out;
-}
-
-/** Overlay de névoa: escurece o mapa e "abre" círculos suaves de visão nas fontes. */
-function drawFog(
-  ctx: CanvasRenderingContext2D,
-  v: View,
-  sources: Array<{ x: number; y: number }>,
-): void {
-  ctx.save();
-  ctx.fillStyle = 'rgba(4,7,16,0.6)';
-  ctx.fillRect(0, 0, v.screenW, v.screenH);
-  ctx.globalCompositeOperation = 'destination-out';
-  const r = FOG.sightRadius * v.scale;
-  for (const s of sources) {
-    const p = toScreen(v, s.x, s.y);
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.55, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(0,0,0,1)');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
 /** Desenha um frame completo a partir do GameState + UI. A render NÃO decide regra. */
 export function render(
   ctx: CanvasRenderingContext2D,
@@ -656,64 +666,10 @@ export function render(
   drawZones(ctx, v, s);
   drawGuides(ctx, v, s, ui);
 
-  // Névoa de guerra (F2): computa a visibilidade do jogador (só apresentação).
-  const fog = ui.fog ?? false;
-  const sources = fog ? visionSources(s) : null;
-  const visible = fog ? (ui.visibleIds ?? visibleNodeIds(s, FOG.sightRadius)) : null;
-  const r2 = FOG.sightRadius * FOG.sightRadius;
-  const seen = (x: number, y: number): boolean => {
-    if (!sources) return true;
-    for (const pt of sources) {
-      const dx = x - pt.x;
-      const dy = y - pt.y;
-      if (dx * dx + dy * dy <= r2) return true;
-    }
-    return false;
-  };
-
-  for (const f of s.fleets) {
-    if (fog && f.owner !== 'you' && !seen(f.x, f.y)) continue; // frota inimiga na névoa: oculta
-    drawFleet(ctx, v, s, f);
-  }
+  drawRoutes(ctx, v, s, ui);
+  for (const f of s.fleets) drawFleet(ctx, v, s, f);
   if (ui.fx && ui.fx.length > 0) drawFx(ctx, v, ui.fx);
-  for (const n of s.nodes) {
-    const isVisible = !visible || n.owner === 'you' || visible.has(n.id);
-    if (isVisible) {
-      drawNode(ctx, v, n, ui.selection.has(n.id));
-      continue;
-    }
-    // F2.5 — memória de última visão: fora da névoa desenha-se a LEMBRANÇA
-    // (dono/tier/tropas de quando foi visto), esmaecida; nunca visto = '?' anônimo.
-    const g = ui.ghosts?.get(n.id);
-    ctx.globalAlpha = 0.45;
-    if (g) {
-      drawNode(
-        ctx,
-        v,
-        {
-          ...n,
-          owner: g.owner,
-          kind: g.kind,
-          tier: g.tier,
-          troops: g.troops,
-          pulse: 0,
-          underAttack: false,
-          upgrading: undefined,
-        },
-        false,
-      );
-    } else {
-      drawNode(
-        ctx,
-        v,
-        { ...n, owner: 'neutral', kind: 'normal', troops: 0, pulse: 0, underAttack: false, upgrading: undefined },
-        false,
-        true,
-        true,
-      );
-    }
-    ctx.globalAlpha = 1;
-  }
+  for (const n of s.nodes) drawNode(ctx, v, n, ui.selection.has(n.id));
   drawCoreHold(ctx, v, s);
   if (ui.box && (ui.box.w > 2 || ui.box.h > 2)) {
     const p = toScreen(v, ui.box.x, ui.box.y);
@@ -726,8 +682,8 @@ export function render(
     ctx.strokeRect(p.x, p.y, w, h);
     ctx.restore();
   }
-  if (fog && sources) drawFog(ctx, v, sources);
   drawHUD(ctx, v, s, ui);
+  drawDoctrineHUD(ctx, v, s);
   if (ui.tip) drawTip(ctx, v, ui.tip);
   if (ui.debug?.visible) drawDebugOverlay(ctx, s, ui.debug);
   if (s.gameOver) drawBanner(ctx, v, s);

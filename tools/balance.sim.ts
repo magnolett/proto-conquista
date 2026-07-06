@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import { createInitialState, step, aiThink, effectiveAI } from '@conquista/sim';
+import { createInitialState, step, aiThink, effectiveAI, doctrineForPersona } from '@conquista/sim';
 import { PERSONA_ORDER, PERSONAS } from '@conquista/shared';
 import type { AIPersona, Difficulty, Owner } from '@conquista/shared';
 
@@ -32,6 +32,10 @@ function selfPlay(
   enemyPersona: AIPersona,
 ): MatchResult {
   const s = createInitialState(seed, { difficulty: enemyDiff, persona: enemyPersona });
+  // O lado espelhado ganha doutrina pela MESMA regra persona→doutrina do enemy
+  // (roll determinístico da seed) — sem isso o you ficaria preso no default.
+  const youRoll = (Math.imul(seed, 2654435761) >>> 0) / 4294967296;
+  s.doctrines.you.id = doctrineForPersona(youPersona, youRoll);
   let youTimer = 0;
   const maxSteps = Math.round((MAX_MINUTES * 60) / DT);
   for (let i = 0; i < maxSteps && !s.gameOver; i++) {

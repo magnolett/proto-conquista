@@ -20,7 +20,7 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 
 ## Estado
 
-**Monorepo TypeScript jogável e no ar** ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/)): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado, produção por *tier*, frotas com tempo de viagem, captura, multi-seleção, **IA honesta com 3 dificuldades**. **F2:** tipos de base (escudo/veloz/canhão), zonas de mapa (estrada/lamaçal), névoa, cronômetro+placar. **F2.5 (profundidade estratégica):** upgrade é **obra vulnerável** com **especialização à escolha** (`Z`/`X`/`C`) · **interceptação de frotas em trânsito** · IA com **personas por seed** (reveladas só no fim), **all-in coordenado** e **flanqueio de canhões** · **névoa ligada por padrão** com memória de última visão · **waypoint** (Shift no arrasto) · vitória por **domínio do centro** · neutras que **crescem** · **atrito de suprimento**. **F3:** menu inicial, onboarding de primeira partida e **sons sintetizados** (Web Audio, zero asset, tecla `M`). **Verificado:** typecheck 0 erros · **96 testes** (golden replays congelados + smoke de partida completa) · build + deploy (GitHub Pages) ok. Balance inicial calibrado por **self-play** (`pnpm balance`); falta o refino humano.
+**Monorepo TypeScript jogável e no ar** ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/)): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado, produção por *tier*, frotas com tempo de viagem, captura, multi-seleção, **IA honesta com 3 dificuldades**. **F2:** tipos de base (escudo/veloz/canhão), zonas de mapa (estrada/lamaçal), névoa, cronômetro+placar. **F2.5 (profundidade estratégica):** upgrade é **obra vulnerável** com **especialização à escolha** (`Z`/`X`/`C`) · **interceptação de frotas em trânsito** · IA com **personas por seed** (reveladas só no fim), **all-in coordenado** e **flanqueio de canhões** · **waypoint** (Shift no arrasto) · vitória por **domínio do centro** · neutras que **crescem** · **atrito de suprimento**. **F3:** menu inicial, onboarding e **sons sintetizados** (Web Audio, zero asset, `M`). **F4-lite (iteração pós-playtest):** **mapas densos com 3 layouts** sorteados por seed · **rotas de suprimento** (botão direito arrastado = fluxo automático cortável) · **doutrinas** (poder ativo `[Q]`, escolhido no menu; a IA usa o da persona dela). *(Névoa de guerra foi testada e REMOVIDA — corte consciente.)* **Verificado:** typecheck 0 erros · **106 testes** (goldens congelados + smoke de partida completa) · build + deploy (GitHub Pages) ok. Balance calibrado por **self-play** (`pnpm balance`); refino final é humano.
 
 ## Rodando
 
@@ -32,15 +32,16 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 |---|---|
 | **Arraste** (de uma base sua → qualquer base) | Enviar tropas (ataca inimigo / reforça aliado) |
 | **Shift** durante o arraste | Fixa um **desvio** (waypoint): flanquear canhão, surfar estrada, fugir do lamaçal |
+| **Botão DIREITO arrastado** (base sua → base aliada) | Liga uma **ROTA de suprimento** (fluxo automático de excedente); direito na própria base/no vazio remove |
 | **Caixa de seleção** + clique no alvo | Multi-envio (de várias bases ao mesmo tempo) |
 | **Clique** numa base sua | Alterna seleção (montar grupo) |
-| **1 / 2 / 3 / 4** | Força do envio (25 / 50 / 75 / 100%) |
+| **1 / 2 / 3 / 4** | Força do envio (25 / 50 / 75 / 100%) — no **menu**, `1/2/3` escolhem a **doutrina** |
 | **U** | Inicia a **obra** de upgrade mantendo a vocação (custa tropas AGORA; a base fica vulnerável) |
 | **Z / X / C** | Obra de upgrade **especializando**: escudo / veloz / canhão |
+| **Q** | Ativa a sua **doutrina** (Blitz / Muralha / Mobilização — efeito temporário com cooldown) |
 | **Espaço** | Pausa |
 | **R** / **Shift+R** | Nova partida (nova seed) / mesma seed (replay) |
 | **G** | Cicla a dificuldade da IA (fácil / normal / difícil) |
-| **F** | Liga/desliga a névoa de guerra (começa **ligada**) |
 | **M** | Liga/desliga o som (sintetizado, zero asset) |
 | **O** · **Tab** · **− / =** | Overlay de debug · seleciona dial · ajusta o dial (playtest) |
 
@@ -51,7 +52,10 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 - Longe de qualquer base sua, a frota sofre **atrito de suprimento** — ataques profundos pedem bases-ponte.
 - **Captura** = chegar com mais tropas que a defesa. Vence quem **eliminar** o outro **ou dominar a fortaleza central** por tempo contínuo (anel de progresso).
 - **Upgrade é obra**: paga agora, evolui depois; em obra a base não produz e toma dano ampliado — capturada, o investimento morre. Ao evoluir você **escolhe a vocação** (escudo/veloz/canhão).
-- **Tipos de base**: escudo resiste mais · veloz acelera frotas · canhão afina frotas inimigas por perto. **Zonas** aceleram/atrasam; a **névoa** (ligada por padrão) esconde o que está longe — o que você já viu fica como **lembrança esmaecida**.
+- **Tipos de base**: escudo resiste mais · veloz acelera frotas · canhão afina frotas inimigas por perto. **Zonas** aceleram/atrasam.
+- **Rotas de suprimento** mantêm o exército fluindo sem microgestão — e viram alvo: o inimigo intercepta o comboio.
+- Cada lado tem uma **doutrina** (poder ativo com cooldown): Blitz, Muralha ou Mobilização — o HUD avisa quando a IA ativa a dela.
+- O **mapa muda de formato** a cada partida (espalhado, corredor central ou alas) — a geometria é parte da estratégia.
 - A **IA joga com uma persona** sorteada por partida (agressiva/econômica/defensiva/equilibrada) — descubra qual é lendo os primeiros movimentos; ela é revelada só no placar final.
 
 ## Próximos passos

@@ -7,6 +7,8 @@ import type {
   BaseKindConfig,
   AIPersona,
   PersonaConfig,
+  DoctrineId,
+  DoctrineConfig,
 } from './types.js';
 
 /**
@@ -94,9 +96,6 @@ export const MAP_MODS = {
   mudRadius: 90,
 };
 
-/** Névoa de guerra (F2): raio de visão ao redor de cada base/frota sua. Mutável: dial. */
-export const FOG = { sightRadius: 230 };
-
 /** Pesos do placar (F2): pontuação = bases*baseW + tropas + tiers*tierW. Mutável: diais. */
 export const SCORE = { baseW: 100, tierW: 50 };
 
@@ -150,6 +149,63 @@ export const NEUTRAL = { growthRate: 0.12, growthCap: 40 };
  * attritionPerSec 0 ⇒ desligado.
  */
 export const SUPPLY = { range: 430, attritionPerSec: 0.02 };
+
+/**
+ * ROUTE (F4-lite): rotas de suprimento — botão DIREITO arrastado liga base→base
+ * aliada; a cada `interval` s a origem envia `ratio` do excedente acima de `keep`.
+ * O jogo vira desenhar uma REDE (que o inimigo corta com interceptação).
+ * interval 0 ⇒ desligado. Rota pausa durante obra e morre se o destino cair.
+ */
+export const ROUTE = { interval: 3.5, ratio: 0.35, keep: 12 };
+
+/**
+ * DOCTRINES (F4-lite): poder ativo por partida (Q). O jogador escolhe no menu;
+ * a IA usa a da persona (agressiva=blitz, defensiva=muralha, econômica=mobilização,
+ * equilibrada=sorteio). Mesmas regras p/ os dois lados.
+ */
+export const DOCTRINES: Readonly<Record<DoctrineId, DoctrineConfig>> = {
+  blitz: {
+    label: 'Blitz',
+    // 1.6 (era 1.45): a mais fraca na matriz doutrina×doutrina do self-play
+    // (38–47%) — buff leve (probe 2026-07-06).
+    hint: 'frotas +60% de velocidade por 8s',
+    duration: 8,
+    cooldown: 45,
+    fleetSpeedMul: 1.6,
+    dmgTakenMul: 1,
+    prodMul: 1,
+  },
+  bulwark: {
+    label: 'Muralha',
+    hint: 'bases recebem −45% de dano por 6s',
+    duration: 6,
+    cooldown: 45,
+    fleetSpeedMul: 1,
+    dmgTakenMul: 0.55,
+    prodMul: 1,
+  },
+  surge: {
+    label: 'Mobilização',
+    // 1.5/55 (eram 1.9/50): dominava o meta no self-play (76% de winrate média;
+    // economia composta com uptime alto) — nerf medido (probe 2026-07-06).
+    hint: 'produção +50% por 8s',
+    duration: 8,
+    cooldown: 55,
+    fleetSpeedMul: 1,
+    dmgTakenMul: 1,
+    prodMul: 1.5,
+  },
+};
+
+/** Ordem canônica p/ ciclar/selecionar doutrina. */
+export const DOCTRINE_ORDER: readonly DoctrineId[] = ['blitz', 'bulwark', 'surge'];
+
+/**
+ * MAPGEN (F4-lite): densidade e variedade do mapa. Mais nós = mais frentes =
+ * mais decisões por minuto; o LAYOUT (sorteado por seed) muda a geometria:
+ * classic (espalhado) · lanes (corredor central) · flanks (alas norte/sul).
+ */
+export const MAPGEN = { neutralPairs: 7, minDist: 104 };
 
 /**
  * PERSONAS (F2.5): estilos de jogo da IA, sorteados por seed (easy é sempre
