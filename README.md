@@ -20,7 +20,7 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 
 ## Estado
 
-**Monorepo TypeScript jogável e no ar** ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/)): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado, produção por *tier*, frotas com tempo de viagem, captura, multi-seleção, **IA honesta com 3 dificuldades**. **F2 (profundidade):** tipos de base (escudo/veloz/canhão), modificadores de mapa (estrada/lamaçal), névoa de guerra (`F`) e cronômetro+placar. **Verificado:** typecheck 0 erros · **41 testes** (Vitest, golden replays) · build + deploy (GitHub Pages) ok. Falta calibração humana dos diais F2.
+**Monorepo TypeScript jogável e no ar** ([magnolett.github.io/proto-conquista](https://magnolett.github.io/proto-conquista/)): `packages/sim` (simulação determinística pura, PRNG seedado), `packages/shared` (diais tipados), `apps/web` (Canvas 2D, só render+input). Mapa espelhado, produção por *tier*, frotas com tempo de viagem, captura, multi-seleção, **IA honesta com 3 dificuldades**. **F2:** tipos de base (escudo/veloz/canhão), zonas de mapa (estrada/lamaçal), névoa, cronômetro+placar. **F2.5 (profundidade estratégica):** upgrade é **obra vulnerável** com **especialização à escolha** (`Z`/`X`/`C`) · **interceptação de frotas em trânsito** · IA com **personas por seed** (reveladas só no fim), **all-in coordenado** e **flanqueio de canhões** · **névoa ligada por padrão** com memória de última visão · **waypoint** (Shift no arrasto) · vitória por **domínio do centro** · neutras que **crescem** · **atrito de suprimento**. **F3:** menu inicial, onboarding de primeira partida e **sons sintetizados** (Web Audio, zero asset, tecla `M`). **Verificado:** typecheck 0 erros · **96 testes** (golden replays congelados + smoke de partida completa) · build + deploy (GitHub Pages) ok. Balance inicial calibrado por **self-play** (`pnpm balance`); falta o refino humano.
 
 ## Rodando
 
@@ -31,24 +31,30 @@ Galcon / Auralux (fluxo de tropas entre nós) · Nexus Wars (macro de produção
 | Controle | Ação |
 |---|---|
 | **Arraste** (de uma base sua → qualquer base) | Enviar tropas (ataca inimigo / reforça aliado) |
+| **Shift** durante o arraste | Fixa um **desvio** (waypoint): flanquear canhão, surfar estrada, fugir do lamaçal |
 | **Caixa de seleção** + clique no alvo | Multi-envio (de várias bases ao mesmo tempo) |
 | **Clique** numa base sua | Alterna seleção (montar grupo) |
 | **1 / 2 / 3 / 4** | Força do envio (25 / 50 / 75 / 100%) |
-| **U** | Upgrade da(s) base(s) selecionada(s) — custa tropas, sobe produção e teto |
+| **U** | Inicia a **obra** de upgrade mantendo a vocação (custa tropas AGORA; a base fica vulnerável) |
+| **Z / X / C** | Obra de upgrade **especializando**: escudo / veloz / canhão |
 | **Espaço** | Pausa |
 | **R** / **Shift+R** | Nova partida (nova seed) / mesma seed (replay) |
 | **G** | Cicla a dificuldade da IA (fácil / normal / difícil) |
-| **F** | Liga/desliga a névoa de guerra |
+| **F** | Liga/desliga a névoa de guerra (começa **ligada**) |
+| **M** | Liga/desliga o som (sintetizado, zero asset) |
 | **O** · **Tab** · **− / =** | Overlay de debug · seleciona dial · ajusta o dial (playtest) |
 
 ## Regras (resumo)
 - Suas bases **produzem** tropas até um teto; **tier** maior = mais produção e teto.
-- Bases **neutras** não produzem até serem capturadas (são objetivos).
-- A **frota viaja em velocidade fixa** → a distância importa (reforço chega atrasado).
-- **Captura** = chegar com mais tropas que a defesa. Vence quem eliminar o outro.
-- **Tipos de base** (F2): escudo resiste mais · veloz acelera frotas · canhão afina frotas inimigas por perto. **Zonas** de mapa aceleram/atrasam; **névoa** (`F`) esconde o que está longe.
+- Bases **neutras** crescem devagar até um limite — esperar para expandir **custa**.
+- A **frota viaja em velocidade fixa** → a distância importa (reforço chega atrasado). Frotas inimigas que **se cruzam brigam no ar** (a menor morre; a maior segue com a diferença).
+- Longe de qualquer base sua, a frota sofre **atrito de suprimento** — ataques profundos pedem bases-ponte.
+- **Captura** = chegar com mais tropas que a defesa. Vence quem **eliminar** o outro **ou dominar a fortaleza central** por tempo contínuo (anel de progresso).
+- **Upgrade é obra**: paga agora, evolui depois; em obra a base não produz e toma dano ampliado — capturada, o investimento morre. Ao evoluir você **escolhe a vocação** (escudo/veloz/canhão).
+- **Tipos de base**: escudo resiste mais · veloz acelera frotas · canhão afina frotas inimigas por perto. **Zonas** aceleram/atrasam; a **névoa** (ligada por padrão) esconde o que está longe — o que você já viu fica como **lembrança esmaecida**.
+- A **IA joga com uma persona** sorteada por partida (agressiva/econômica/defensiva/equilibrada) — descubra qual é lendo os primeiros movimentos; ela é revelada só no placar final.
 
 ## Próximos passos
-- **Calibração** (humano): ajustar os diais F2 em runtime (overlay `O` + `Tab`/`-`/`=`) ou em `packages/shared`.
-- **IA + canhão:** a IA já entende escudo, mas ainda não desvia do alcance de canhões ao rotear.
+- **Playtest humano**: calibração fina dos diais (overlay `O` ou `packages/shared`) — depois `pnpm balance` (sanidade IA×IA) e `pnpm goldens:update`.
+- **F3 restante:** medir 60 FPS em hardware modesto (overlay `O` mostra FPS).
 - **PvP** (F4): servidor autoritativo reusando `packages/sim` — ver [docs/05](docs/05-roadmap.md) e [ADR-0003](docs/decisions/ADR-0003-rts-tempo-real-autoritativo.md).
