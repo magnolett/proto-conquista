@@ -13,10 +13,14 @@ function makeState(difficulty: GameState['difficulty'], nodes: GameState['nodes'
     time: 0,
     aiTimer: 0,
     difficulty,
+    persona: 'balanced',
     gameOver: false,
     winner: null,
     nextFleetId: 0,
     config: { fleetSpeed: 135, sendDefault: 0.5, worldW: 1280, worldH: 720 },
+    fx: [],
+    coreHold: { owner: null, held: 0 },
+    winReason: null,
   };
 }
 

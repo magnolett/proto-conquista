@@ -1,0 +1,16 @@
+{
+  "hash": "0113f799",
+  "summary": {
+    "time": "20.0000",
+    "persona": "rusher",
+    "winner": null,
+    "winReason": null,
+    "rng": 2264001634,
+    "fleets": 1,
+    "owners": {
+      "you": 1,
+      "enemy": 3,
+      "neutral": 7
+    }
+  }
+}

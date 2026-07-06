@@ -1,10 +1,50 @@
-import { TIERS, upgradeCost, BASE_KINDS, SCORE } from '@conquista/shared';
+import { TIERS, upgradeCost, BASE_KINDS, SCORE, UPGRADE } from '@conquista/shared';
 import type { BaseKind, Owner } from '@conquista/shared';
 import type { Node, Fleet, GameState, Zone } from './types.js';
 
+/**
+ * Hipotenusa via sqrt — bit-determinística entre engines JS (IEEE-754 exige
+ * arredondamento correto de sqrt; `Math.hypot` NÃO tem essa garantia e pode
+ * divergir por ULPs entre V8/JSC/SpiderMonkey, o que quebraria replay/PvP
+ * cross-machine). Coordenadas do jogo são pequenas: sem risco de overflow.
+ */
+export function hyp(dx: number, dy: number): number {
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 /** Distância euclidiana entre dois pontos. */
 export function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+  return hyp(a.x - b.x, a.y - b.y);
+}
+
+/**
+ * Comprimento do trecho do segmento (x1,y1)→(x2,y2) que fica DENTRO do círculo
+ * (cx,cy,r). Puro e determinístico — usado pela IA p/ estimar o custo de cruzar
+ * o alcance de um canhão (F2.5). Retorna 0 se não há interseção.
+ */
+export function segmentCircleChord(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cx: number,
+  cy: number,
+  r: number,
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 <= 0) return 0; // segmento degenerado: sem comprimento
+  const fx = x1 - cx;
+  const fy = y1 - cy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c0 = fx * fx + fy * fy - r * r;
+  const disc = b * b - 4 * len2 * c0;
+  if (disc <= 0) return 0;
+  const sq = Math.sqrt(disc);
+  const t1 = Math.max(0, Math.min(1, (-b - sq) / (2 * len2)));
+  const t2 = Math.max(0, Math.min(1, (-b + sq) / (2 * len2)));
+  return (t2 - t1) * Math.sqrt(len2);
 }
 
 /** Aplica os derivados de tier a um nó (espelha applyTier do game.js). */
@@ -44,7 +84,8 @@ export function mkNode(
 }
 
 /**
- * Cria uma frota saindo da borda da base de origem rumo ao alvo.
+ * Cria uma frota saindo da borda da base de origem rumo ao alvo — ou ao
+ * `waypoint` (F2.5), quando a rota tem um ponto de passagem.
  * Espelha spawnFleet do game.js (posição inicial na borda do raio).
  * Muta `state` (push em fleets + incrementa nextFleetId).
  */
@@ -54,10 +95,12 @@ export function spawnFleet(
   tn: Node,
   owner: Fleet['owner'],
   count: number,
+  waypoint?: { x: number; y: number },
 ): void {
-  const dx = tn.x - sn.x;
-  const dy = tn.y - sn.y;
-  const d = Math.hypot(dx, dy) || 1;
+  const aim = waypoint ?? tn;
+  const dx = aim.x - sn.x;
+  const dy = aim.y - sn.y;
+  const d = hyp(dx, dy) || 1;
   state.fleets.push({
     id: state.nextFleetId++,
     owner,
@@ -66,44 +109,79 @@ export function spawnFleet(
     target: tn.id,
     count,
     speedMul: BASE_KINDS[sn.kind].fleetSpeedMul,
+    waypoint: waypoint ? { x: waypoint.x, y: waypoint.y } : undefined,
   });
+}
+
+/**
+ * Multiplicador EFETIVO de dano recebido por um nó (F2.5): o dmgTakenMul do kind,
+ * mas durante uma obra a base está "aberta" — escudo perde a proteção (piso 1)
+ * e o dano é amplificado por UPGRADE.vulnMul. Usada por resolveArrival E pela IA
+ * (mesma regra p/ todos — a IA é honesta).
+ */
+export function effectiveDmgMul(n: Node): number {
+  const base = BASE_KINDS[n.kind].dmgTakenMul;
+  return n.upgrading ? Math.max(base, 1) * UPGRADE.vulnMul : base;
 }
 
 /**
  * Resolve a chegada de uma frota ao nó-alvo (espelha resolveArrival).
  * Mesma cor = reforço (soma, pode passar do cap). Cor diferente = ataque:
  * subtrai; se a defesa fica negativa, a base VIRA com o excedente.
+ * F2.5: base em obra toma dano ampliado, e a captura CANCELA a obra.
+ * Retorna o desfecho (o step usa p/ emitir FxEvent — F3).
  */
-export function resolveArrival(f: Fleet, tn: Node): void {
+export function resolveArrival(f: Fleet, tn: Node): 'reinforced' | 'defended' | 'captured' {
   if (tn.owner === f.owner) {
     tn.troops += f.count;
-  } else {
-    // Escudo (dmgTakenMul < 1) absorve parte do ataque; 'normal' usa 1 ⇒ regra intacta.
-    const dmg = f.count * BASE_KINDS[tn.kind].dmgTakenMul;
-    tn.troops -= dmg;
-    if (tn.troops < 0) {
-      tn.owner = f.owner;
-      tn.troops = -tn.troops;
-      tn.pulse = 1;
-    } else {
-      tn.pulse = 0.5;
-    }
+    return 'reinforced';
   }
+  const dmg = f.count * effectiveDmgMul(tn);
+  tn.troops -= dmg;
+  if (tn.troops < 0) {
+    tn.owner = f.owner;
+    tn.troops = -tn.troops;
+    tn.pulse = 1;
+    tn.upgrading = undefined; // obra em curso morre com a captura (investimento perdido)
+    return 'captured';
+  }
+  tn.pulse = 0.5;
+  return 'defended';
 }
 
 /**
- * Aplica um upgrade a um nó se possível (espelha upgradeNode).
- * Retorna true se o upgrade ocorreu.
+ * INICIA a obra de upgrade de um nó, se possível (F2.5): paga o custo agora e
+ * agenda a evolução (kind alvo opcional — ausente mantém o atual). Uma base só
+ * sustenta UMA obra por vez. Com UPGRADE.timePerTier ≤ 0, aplica na hora
+ * (regra antiga — dial neutro). Retorna true se a obra começou/aplicou.
  */
-export function upgradeNode(n: Node): boolean {
+export function upgradeNode(n: Node, kind?: BaseKind): boolean {
   if (n.tier >= TIERS.length - 1) return false;
+  if (n.upgrading) return false;
   const cost = upgradeCost(n.tier);
   if (n.troops < cost) return false;
   n.troops -= cost;
+  const targetKind: BaseKind = kind ?? n.kind;
+  const total = UPGRADE.timePerTier * (n.tier + 1);
+  if (total <= 0) {
+    n.tier++;
+    n.kind = targetKind;
+    applyTier(n);
+    n.pulse = 1;
+    return true;
+  }
+  n.upgrading = { kind: targetKind, remaining: total, total };
+  return true;
+}
+
+/** Conclui a obra de um nó (F2.5): sobe o tier, aplica o kind escolhido. */
+export function finishUpgrade(n: Node): void {
+  if (!n.upgrading) return;
   n.tier++;
+  n.kind = n.upgrading.kind;
+  n.upgrading = undefined;
   applyTier(n);
   n.pulse = 1;
-  return true;
 }
 
 /**

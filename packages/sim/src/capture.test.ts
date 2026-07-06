@@ -75,6 +75,8 @@ describe('Captura via step (integração)', () => {
     const after = s.nodes[target.id]!;
     expect(after.owner).toBe('you');
     expect(after.troops).toBeGreaterThan(0);
+    // F3: a captura emite FxEvent (a apresentação soa/flasha a partir dele)
+    expect(s.fx.some((e) => e.kind === 'capture' && e.owner === 'you')).toBe(true);
     // a frota foi consumida na chegada
     expect(s.fleets.some((f) => f.target === target.id && f.owner === 'you' && f.count === 12)).toBe(
       false,

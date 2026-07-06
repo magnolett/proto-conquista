@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
+import { NEUTRAL } from '@conquista/shared';
 import { createInitialState, step, cloneState, type GameState } from './index.js';
 
 /** Soma de TODAS as tropas no estado: bases + frotas em trânsito. */
@@ -11,6 +12,13 @@ function totalTroops(s: GameState): number {
 }
 
 describe('Conservação de tropas', () => {
+  it('pré-condição F2.5: growthCap não pode invalidar os cenários abaixo', () => {
+    // Os cenários usam guarnições neutras de 40/50 tropas e DEPENDEM de neutras
+    // não produzirem: o crescimento de neutras (NEUTRAL) só age ABAIXO do teto.
+    // Se este guard falhar, suba as guarnições dos testes junto com o dial.
+    expect(NEUTRAL.growthCap).toBeLessThanOrEqual(40);
+  });
+
   it('um step sem combate, sem produção e sem IA conserva o total', () => {
     // Estado artificial: só bases NEUTRAS (não produzem) + uma frota longe do alvo.
     const s = createInitialState(1, { difficulty: 'normal' });

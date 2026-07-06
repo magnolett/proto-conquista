@@ -51,6 +51,27 @@ export interface DifficultyConfig {
   readonly upgradeChance: number;
 }
 
+/**
+ * Persona estratégica da IA (F2.5): sorteada por seed na criação da partida.
+ * O jogador NÃO é avisado — precisa LER o oponente pelos primeiros movimentos.
+ */
+export type AIPersona = 'balanced' | 'rusher' | 'boomer' | 'turtle';
+
+/** Multiplicadores que uma persona aplica sobre os pesos de DIFFICULTY. */
+export interface PersonaConfig {
+  /** Rótulo legível (pt-br) — revelado só no placar final. */
+  readonly label: string;
+  aiTickMul: number;
+  expandThreshMul: number;
+  expandForceMul: number;
+  antiPlayerWMul: number;
+  upgradeChanceMul: number;
+  /** <1 ⇒ defende mais cedo (mais sensível a ameaça). */
+  defendThreshMul: number;
+  /** Persona capaz de ALL-IN coordenado (várias bases somam forças num alvo). */
+  coordinated: boolean;
+}
+
 /** Especialidade (tipo) de uma base. 'normal' = comportamento padrão. */
 export type BaseKind = 'normal' | 'cannon' | 'shield' | 'fast';
 

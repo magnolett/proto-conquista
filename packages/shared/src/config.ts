@@ -5,6 +5,8 @@ import type {
   DifficultyConfig,
   BaseKind,
   BaseKindConfig,
+  AIPersona,
+  PersonaConfig,
 } from './types.js';
 
 /**
@@ -39,19 +41,22 @@ export const BASE_KINDS: Readonly<Record<BaseKind, BaseKindConfig>> = {
 };
 
 /**
- * DIFFICULTY — valores EXATOS do contrato de costuras compartilhado.
- * Não alterar sem alinhar com as outras frentes.
+ * DIFFICULTY — pesos por dificuldade. (O "contrato de costuras" era da era
+ * multi-frente do F0; hoje são diais de calibração como os demais.)
  */
 export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyConfig>> = {
   easy: {
     label: 'Fácil',
-    aiTick: 1.1,
+    // aiTick 1.4 / upgradeChance 0.15 (eram 1.1/0.2): self-play dava hard×easy
+    // ~60% — contraste de dificuldade fraco; o fácil agora pensa bem mais
+    // devagar (também melhora o onboarding humano). balance-report 2026-07-06.
+    aiTick: 1.4,
     expandThresh: 0.75,
     expandForce: 0.55,
     tierW: 35,
     distW: 0.2,
     antiPlayerW: 10,
-    upgradeChance: 0.2,
+    upgradeChance: 0.15,
   },
   normal: {
     label: 'Normal',
@@ -94,6 +99,122 @@ export const FOG = { sightRadius: 230 };
 
 /** Pesos do placar (F2): pontuação = bases*baseW + tropas + tiers*tierW. Mutável: diais. */
 export const SCORE = { baseW: 100, tierW: 50 };
+
+/**
+ * UPGRADE (F2.5): evoluir agora é uma OBRA, não um clique instantâneo.
+ * Duração = timePerTier × (tier+1) segundos (T1→T2: 1×, T2→T3: 2×). Durante a obra:
+ * produção PARA, canhão não atira e o dano recebido é multiplicado por vulnMul
+ * (escudo perde a proteção — a base está "aberta"). Captura durante a obra CANCELA
+ * o investimento. timePerTier 0 ⇒ upgrade instantâneo (regra antiga). Mutável: diais.
+ */
+export const UPGRADE = { timePerTier: 6, vulnMul: 1.3 };
+
+/**
+ * AI_TUNING (F2.5): diais da IA fora do contrato DIFFICULTY.
+ * buildTargetW = bônus de score p/ atacar base em obra (punir greed é jogar bem).
+ * defendThresh/helperDrain = regra de defesa (antes hardcoded 0.9/0.6 no aiThink).
+ * cannonAvoidW = peso do custo estimado de cruzar alcance de canhão hostil na escolha de alvo.
+ */
+export const AI_TUNING = {
+  buildTargetW: 30,
+  // 0.82 (era 0.9): self-play mostrou defesa reagindo tarde demais (partidas de
+  // 45s decididas por rush cego); 0.78 travava partidas IA×IA em dreno defensivo
+  // perpétuo — 0.82 é o meio-termo medido (balance-report 2026-07-06).
+  defendThresh: 0.82,
+  helperDrain: 0.6,
+  cannonAvoidW: 1.0,
+  coreW: 45,
+  supplyAvoidW: 0.08,
+};
+
+/**
+ * CORE (F2.5): vitória por DOMÍNIO — segurar a fortaleza central por holdSeconds
+ * contínuos vence a partida (força conflito no meio do mapa e mata a varredura
+ * final tediosa). 0 ⇒ desligado (vitória só por eliminação).
+ */
+// 35 (era 45): no self-play o domínio NUNCA decidia (0% em 160 partidas) — o
+// anel era mais longo que a própria partida (balance-report 2026-07-06).
+export const CORE = { holdSeconds: 35 };
+
+/**
+ * NEUTRAL (F2.5): bases neutras crescem devagar até min(cap, growthCap) —
+ * esperar p/ expandir passa a CUSTAR (pressão de tempo na abertura).
+ * growthRate 0 ⇒ neutras estáticas (regra antiga).
+ */
+export const NEUTRAL = { growthRate: 0.12, growthCap: 40 };
+
+/**
+ * SUPPLY (F2.5): atrito de suprimento — frota a mais de `range` de QUALQUER base
+ * do próprio dono perde attritionPerSec (fração/s) e morre abaixo de 1 tropa.
+ * Pune o deathball transcontinental; expandir por saltos vira logística.
+ * attritionPerSec 0 ⇒ desligado.
+ */
+export const SUPPLY = { range: 430, attritionPerSec: 0.02 };
+
+/**
+ * PERSONAS (F2.5): estilos de jogo da IA, sorteados por seed (easy é sempre
+ * 'balanced'). Modulam DIFFICULTY por multiplicadores — a MESMA dificuldade
+ * joga diferente de partida em partida, e o jogador precisa ler qual veio.
+ */
+export const PERSONAS: Readonly<Record<AIPersona, PersonaConfig>> = {
+  balanced: {
+    label: 'Equilibrada',
+    aiTickMul: 1,
+    expandThreshMul: 1,
+    expandForceMul: 1,
+    antiPlayerWMul: 1,
+    upgradeChanceMul: 1,
+    defendThreshMul: 1,
+    coordinated: false,
+  },
+  rusher: {
+    label: 'Agressiva',
+    aiTickMul: 0.85,
+    expandThreshMul: 0.75,
+    // 1.05/1.8 (eram 1.1/2.2): rush dominava o meta no self-play (63% e
+    // subindo a cada buff de defesa) — balance-report 2026-07-06.
+    expandForceMul: 1.05,
+    antiPlayerWMul: 1.8,
+    upgradeChanceMul: 0.5,
+    defendThreshMul: 1.15,
+    coordinated: true,
+  },
+  boomer: {
+    label: 'Econômica',
+    aiTickMul: 1,
+    // 1.05/1.6 (eram 1.15/2.0): upar demais = muitas janelas de obra e pouca
+    // pressão (34% no self-play) — balance-report 2026-07-06.
+    expandThreshMul: 1.05,
+    expandForceMul: 0.95,
+    antiPlayerWMul: 0.45,
+    upgradeChanceMul: 1.6,
+    defendThreshMul: 1,
+    coordinated: false,
+  },
+  turtle: {
+    label: 'Defensiva',
+    aiTickMul: 1.1,
+    // 1.15/1.25 (eram 1.35/1.15): com 1.35 a turtle nunca expandia e terminava
+    // com 29% de winrate no self-play — agora expande um pouco mais cedo e o
+    // contra-ataque vai mais pesado (balance-report 2026-07-06).
+    expandThreshMul: 1.15,
+    expandForceMul: 1.25,
+    antiPlayerWMul: 0.8,
+    upgradeChanceMul: 1.2,
+    defendThreshMul: 0.6,
+    coordinated: true,
+  },
+};
+
+/** Ordem canônica p/ o sorteio determinístico de persona. */
+export const PERSONA_ORDER: readonly AIPersona[] = ['balanced', 'rusher', 'boomer', 'turtle'];
+
+/**
+ * ENGAGE (F2.5): interceptação de frotas em trânsito. Frotas de donos diferentes
+ * a até `radius` uma da outra brigam no ar: a menor morre, a maior segue com a
+ * diferença (mesma aritmética da chegada). radius 0 ⇒ sem interceptação (regra antiga).
+ */
+export const ENGAGE = { radius: 16 };
 
 /** Custo de upgrade de uma base no tier atual: 20*(tier+1). T1->20, T2->40. */
 export function upgradeCost(tier: number): number {

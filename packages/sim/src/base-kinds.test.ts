@@ -70,9 +70,15 @@ describe('Tipos de base — canhão (range/dps)', () => {
     const s = createInitialState(1);
     const cannon = mkNode(0, 500, 300, 'you', 0, 30, 'cannon');
     const far = mkNode(1, 500, 1500, 'neutral', 0, 10, 'normal'); // alvo longe: não chega
-    s.nodes = [cannon, far];
+    // âncora ENEMY pobre perto da frota inimiga: mantém-na SUPRIDA (F2.5) — este
+    // teste isola o canhão; atrito de suprimento tem testes próprios.
+    const anchor = mkNode(2, 505, 260, 'enemy', 0, 1);
+    s.nodes = [cannon, far, anchor];
+    // As duas frotas ficam no alcance do canhão (110), mas AFASTADAS entre si
+    // (dist ~41 > ENGAGE.radius) p/ não disparar a interceptação da F2.5 —
+    // este teste isola o CANHÃO.
     const enemyFleet: Fleet = { id: 0, owner: 'enemy', x: 505, y: 300, target: 1, count: 50 };
-    const ownFleet: Fleet = { id: 1, owner: 'you', x: 495, y: 300, target: 1, count: 50 };
+    const ownFleet: Fleet = { id: 1, owner: 'you', x: 495, y: 340, target: 1, count: 50 };
     s.fleets = [enemyFleet, ownFleet];
     s.nextFleetId = 2;
     step(s, undefined, 0.05);
@@ -86,7 +92,8 @@ describe('Tipos de base — canhão (range/dps)', () => {
     const s = createInitialState(1);
     const cannon = mkNode(0, 0, 300, 'you', 0, 30, 'cannon');
     const far = mkNode(1, 1200, 300, 'neutral', 0, 10, 'normal');
-    s.nodes = [cannon, far];
+    const anchor = mkNode(2, 600, 340, 'enemy', 0, 1); // suprimento da frota inimiga (F2.5)
+    s.nodes = [cannon, far, anchor];
     // frota a 600px do canhão (>> range 110), indo p/ o alvo
     const enemyFleet: Fleet = { id: 0, owner: 'enemy', x: 600, y: 300, target: 1, count: 50 };
     s.fleets = [enemyFleet];

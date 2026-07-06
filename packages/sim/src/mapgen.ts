@@ -1,7 +1,7 @@
 import { MAP_MODS } from '@conquista/shared';
 import type { Config, BaseKind } from '@conquista/shared';
 import type { Node, Zone } from './types.js';
-import { mkNode } from './helpers.js';
+import { mkNode, hyp } from './helpers.js';
 import { nextRng } from './prng.js';
 
 /**
@@ -38,20 +38,24 @@ export function generateMap(
   };
 
   const farEnough = (x: number, y: number): boolean =>
-    placed.every((p) => Math.hypot(p.x - x, p.y - y) > minDist) &&
-    Math.hypot((W - x) - x, (H - y) - y) > minDist * 0.7;
+    placed.every((p) => hyp(p.x - x, p.y - y) > minDist) &&
+    hyp((W - x) - x, (H - y) - y) > minDist * 0.7;
 
   // Base do jogador (canto inferior-esquerdo) + espelho = base da IA.
+  // Guarnição 26 (era 22): sobreviver ao 1º all-in coordenado — self-play media
+  // partidas de 45s sem arco (balance-report 2026-07-06).
   const bx = 120 + rand() * 120;
   const by = H - 140 - rand() * 110;
-  nodes.push(mkNode(nodes.length, bx, by, 'you', 0, 22));
+  nodes.push(mkNode(nodes.length, bx, by, 'you', 0, 26));
   placed.push({ x: bx, y: by });
   const mb = mirror(bx, by);
-  nodes.push(mkNode(nodes.length, mb.x, mb.y, 'enemy', 0, 22));
+  nodes.push(mkNode(nodes.length, mb.x, mb.y, 'enemy', 0, 26));
   placed.push(mb);
 
   // Base central contestada (no eixo de simetria → é o próprio espelho).
-  nodes.push(mkNode(nodes.length, cx, cy, 'neutral', 2, 42, 'shield')); // fortaleza central
+  const core = mkNode(nodes.length, cx, cy, 'neutral', 2, 42, 'shield'); // fortaleza central
+  core.isCore = true; // segurá-la por CORE.holdSeconds vence por DOMÍNIO (F2.5)
+  nodes.push(core);
   placed.push({ x: cx, y: cy });
 
   // Pares de bases neutras espelhadas.
@@ -64,7 +68,7 @@ export function generateMap(
     if (((x - cx) + (y - cy)) > -40) continue; // manter no lado do jogador p/ espelhar
     if (!farEnough(x, y)) continue;
     const m = mirror(x, y);
-    if (!placed.every((p) => Math.hypot(p.x - m.x, p.y - m.y) > minDist)) continue;
+    if (!placed.every((p) => hyp(p.x - m.x, p.y - m.y) > minDist)) continue;
     // short-circuit idêntico ao game.js: o 2º rand() só corre se o 1º falhar.
     const tier = rand() < 0.25 ? 2 : rand() < 0.5 ? 1 : 0;
     const def = tier === 2 ? 36 : tier === 1 ? 20 : 9;

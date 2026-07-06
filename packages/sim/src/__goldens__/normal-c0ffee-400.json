@@ -1,0 +1,16 @@
+{
+  "hash": "17b758f5",
+  "summary": {
+    "time": "6.6667",
+    "persona": "boomer",
+    "winner": null,
+    "winReason": null,
+    "rng": 196895721,
+    "fleets": 0,
+    "owners": {
+      "you": 1,
+      "enemy": 1,
+      "neutral": 9
+    }
+  }
+}

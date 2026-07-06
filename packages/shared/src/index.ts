@@ -6,6 +6,8 @@ export type {
   DifficultyConfig,
   BaseKind,
   BaseKindConfig,
+  AIPersona,
+  PersonaConfig,
 } from './types.js';
 
 export {
@@ -18,4 +20,12 @@ export {
   MAP_MODS,
   FOG,
   SCORE,
+  UPGRADE,
+  AI_TUNING,
+  ENGAGE,
+  PERSONAS,
+  PERSONA_ORDER,
+  CORE,
+  NEUTRAL,
+  SUPPLY,
 } from './config.js';
