@@ -3,18 +3,24 @@ import { computeScore } from '@conquista/sim';
 import type { Owner, Difficulty } from '@conquista/shared';
 import { DIFFICULTY, BASE_KINDS, PERSONAS, CORE, DOCTRINES, DOCTRINE_ORDER } from '@conquista/shared';
 
-/** Paleta tática (porte de COL do game.js). */
+/** Paleta tática (porte de COL do game.js) + rivais do FFA (F5-lite). */
 export const COL = {
   bg: '#0a0e1a',
   grid: 'rgba(120,160,255,0.05)',
   you: '#39d8ff',
   enemy: '#ff7a4a',
+  e2: '#c084fc',
+  e3: '#a3e635',
   neutral: '#7a869c',
   text: '#eaf2ff',
 } as const;
 
 export function ownerColor(o: Owner): string {
-  return o === 'you' ? COL.you : o === 'enemy' ? COL.enemy : COL.neutral;
+  if (o === 'you') return COL.you;
+  if (o === 'enemy') return COL.enemy;
+  if (o === 'e2') return COL.e2;
+  if (o === 'e3') return COL.e3;
+  return COL.neutral;
 }
 
 /** Mapeamento mundo→tela (fit com letterbox). */
@@ -377,9 +383,7 @@ function fmtTime(t: number): string {
 
 function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiState): void {
   const you = s.nodes.filter((n) => n.owner === 'you');
-  const en = s.nodes.filter((n) => n.owner === 'enemy');
   const yt = Math.round(you.reduce((a, n) => a + n.troops, 0));
-  const et = Math.round(en.reduce((a, n) => a + n.troops, 0));
   const diff: Difficulty = s.difficulty;
   ctx.save();
   ctx.textBaseline = 'top';
@@ -387,9 +391,20 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
   ctx.font = 'bold 16px system-ui,Arial';
   ctx.fillStyle = COL.you;
   ctx.fillText('VOCÊ  ' + you.length + ' bases · ' + yt + ' tropas', 16, 14);
+  // FFA (F5-lite): um placar compacto POR RIVAL, empilhado à direita, na cor dele.
+  const rivalIds: Owner[] = ['enemy', 'e2', 'e3'];
+  let row = 0;
   ctx.textAlign = 'right';
-  ctx.fillStyle = COL.enemy;
-  ctx.fillText(en.length + ' bases · ' + et + ' tropas  IA', v.screenW - 16, 14);
+  ctx.font = 'bold 14px system-ui,Arial';
+  for (const id of rivalIds) {
+    if (id !== 'enemy' && !s.rivals?.some((r) => r.id === id)) continue;
+    const ns = s.nodes.filter((n) => n.owner === id);
+    const t = Math.round(ns.reduce((a, n) => a + n.troops, 0));
+    ctx.fillStyle = ownerColor(id);
+    const label = ns.length === 0 ? '☠ eliminada' : ns.length + 'b · ' + t + 't';
+    ctx.fillText('IA' + (row + 1) + '  ' + label, v.screenW - 16, 14 + row * 20);
+    row++;
+  }
   ctx.textAlign = 'center';
   ctx.fillStyle = COL.text;
   ctx.font = '14px system-ui,Arial';
@@ -409,7 +424,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiSta
   ctx.fillStyle = 'rgba(234,242,255,0.55)';
   ctx.font = '12px system-ui,Arial';
   ctx.fillText(
-    'arraste = enviar (Shift fixa DESVIO)  |  botão DIREITO arrastado = ROTA de suprimento  |  caixa+clique = multi-envio  |  [1-4] força  [U/Z/X/C] evoluir  [Q] doutrina  [Espaço] pausa  [R/Shift+R] seed  [G] dificuldade  [M] som' +
+    'arraste = enviar (Shift fixa DESVIO)  |  DIREITO arrastado = ROTA  |  scroll = zoom · botão do MEIO = câmera  |  [1-4] força  [U/Z/X/C] evoluir  [Q] doutrina  [Espaço] pausa  [R/Shift+R] seed  [G] dificuldade  [M] som' +
       (ui.muted ? ' OFF' : '') +
       '  [O] debug',
     v.screenW / 2,
@@ -447,11 +462,15 @@ function drawBanner(ctx: CanvasRenderingContext2D, v: View, s: GameState): void 
   ctx.fillText('×', cx, cy + 38);
   ctx.fillStyle = COL.enemy;
   ctx.fillText(es + ' IA', cx + 70, cy + 38);
-  // Persona da IA (F2.5): revelada SÓ aqui — durante a partida o jogador precisa LER.
+  // Personas das IAs (F2.5): reveladas SÓ aqui — durante a partida o jogador LÊ.
   ctx.fillStyle = 'rgba(234,242,255,0.75)';
   ctx.font = '15px system-ui,Arial';
+  const personas = [PERSONAS[s.persona].label, ...(s.rivals ?? []).map((r) => PERSONAS[r.persona].label)];
   ctx.fillText(
-    'Oponente: ' + PERSONAS[s.persona].label + ' · ' + DIFFICULTY[s.difficulty].label,
+    (personas.length > 1 ? 'Oponentes: ' : 'Oponente: ') +
+      personas.join(', ') +
+      ' · ' +
+      DIFFICULTY[s.difficulty].label,
     cx,
     cy + 68,
   );
@@ -509,6 +528,48 @@ function drawDebugOverlay(ctx: CanvasRenderingContext2D, s: GameState, d: DebugO
   ctx.restore();
 }
 
+/** Geometria do MINIMAPA (F5-lite) — exportada p/ o hit-test de clique no main. */
+export function minimapRect(v: View): { x: number; y: number; w: number; h: number } {
+  const w = 216;
+  const h = Math.round((w * 9) / 16); // mundo 16:9
+  return { x: v.screenW - w - 14, y: v.screenH - h - 44, w, h };
+}
+
+/** Minimapa (F5-lite): nós como pontos coloridos + retângulo da viewport. */
+function drawMinimap(ctx: CanvasRenderingContext2D, v: View, s: GameState): void {
+  const mm = minimapRect(v);
+  const W = s.config.worldW;
+  const H = s.config.worldH;
+  ctx.save();
+  ctx.fillStyle = 'rgba(5,10,22,0.85)';
+  ctx.strokeStyle = 'rgba(120,160,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.fillRect(mm.x, mm.y, mm.w, mm.h);
+  ctx.strokeRect(mm.x, mm.y, mm.w, mm.h);
+  for (const n of s.nodes) {
+    ctx.fillStyle = ownerColor(n.owner);
+    const px = mm.x + (n.x / W) * mm.w;
+    const py = mm.y + (n.y / H) * mm.h;
+    const r = n.isCore ? 3.5 : 2 + n.tier * 0.7;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // retângulo da viewport atual (o que a câmera vê)
+  const vx = (-v.offsetX / v.scale / W) * mm.w + mm.x;
+  const vy = (-v.offsetY / v.scale / H) * mm.h + mm.y;
+  const vw = (v.screenW / v.scale / W) * mm.w;
+  const vh = (v.screenH / v.scale / H) * mm.h;
+  ctx.strokeStyle = 'rgba(234,242,255,0.7)';
+  ctx.strokeRect(
+    Math.max(mm.x, vx),
+    Math.max(mm.y, vy),
+    Math.min(vw, mm.w),
+    Math.min(vh, mm.h),
+  );
+  ctx.restore();
+}
+
 /** Rotas de suprimento ativas (F4-lite): tracejado animado origem→destino. */
 function drawRoutes(ctx: CanvasRenderingContext2D, v: View, s: GameState, ui: UiState): void {
   ctx.save();
@@ -552,11 +613,18 @@ function drawDoctrineHUD(ctx: CanvasRenderingContext2D, v: View, s: GameState): 
   else status = 'pronta — [Q]';
   ctx.fillStyle = d.activeLeft > 0 ? COL.you : d.cooldownLeft > 0 ? 'rgba(234,242,255,0.45)' : COL.text;
   ctx.fillText('⚡ ' + cfg.label + ' · ' + status, 16, y);
-  const e = s.doctrines.enemy;
-  if (e.activeLeft > 0) {
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COL.enemy;
-    ctx.fillText('⚡ IA ativou ' + DOCTRINES[e.id].label + '!', v.screenW / 2, 64);
+  // Alarmes de doutrina RIVAL ativa (FFA: cada IA na própria cor, empilhadas).
+  const rivalDoctrines: Array<{ owner: Owner; st: { id: import('@conquista/shared').DoctrineId; activeLeft: number } }> = [
+    { owner: 'enemy', st: s.doctrines.enemy },
+    ...(s.rivals ?? []).map((r) => ({ owner: r.id as Owner, st: r.doctrine })),
+  ];
+  let alarmRow = 0;
+  ctx.textAlign = 'center';
+  for (const { owner, st } of rivalDoctrines) {
+    if (st.activeLeft <= 0) continue;
+    ctx.fillStyle = ownerColor(owner);
+    ctx.fillText('⚡ rival ativou ' + DOCTRINES[st.id].label + '!', v.screenW / 2, 64 + alarmRow * 20);
+    alarmRow++;
   }
   ctx.restore();
 }
@@ -607,7 +675,11 @@ function drawMenuOverlay(ctx: CanvasRenderingContext2D, v: View, s: GameState): 
   ctx.fillStyle = 'rgba(234,242,255,0.8)';
   ctx.font = '15px system-ui,Arial';
   ctx.fillText(
-    '[G] Dificuldade: ' + DIFFICULTY[s.difficulty].label + '   ·   [R] outro mapa   ·   [M] som',
+    '[G] Dificuldade: ' +
+      DIFFICULTY[s.difficulty].label +
+      '   ·   [E] Oponentes: ' +
+      (1 + (s.rivals?.length ?? 0)) +
+      '   ·   [R] outro mapa   ·   [M] som',
     cx,
     cy + 22,
   );
@@ -628,7 +700,8 @@ function drawMenuOverlay(ctx: CanvasRenderingContext2D, v: View, s: GameState): 
     'arraste de uma base sua = enviar tropas · caixa + clique = várias de uma vez',
     'Shift durante o arrasto fixa um DESVIO · botão DIREITO arrastado = ROTA de suprimento',
     '[U] evoluir (obra vulnerável!) · [Z/X/C] evoluir como escudo / veloz / canhão',
-    'vença ELIMINANDO a IA ou DOMINANDO a fortaleza central · [O] diais de playtest',
+    'SCROLL dá zoom · botão do MEIO arrasta a câmera · clique no minimapa teleporta',
+    'vença ELIMINANDO todos os rivais ou DOMINANDO a fortaleza central · [O] diais',
   ];
   lines.forEach((ln, i) => ctx.fillText(ln, cx, cy + 100 + i * 22));
   ctx.restore();
@@ -684,6 +757,7 @@ export function render(
   }
   drawHUD(ctx, v, s, ui);
   drawDoctrineHUD(ctx, v, s);
+  drawMinimap(ctx, v, s);
   if (ui.tip) drawTip(ctx, v, ui.tip);
   if (ui.debug?.visible) drawDebugOverlay(ctx, s, ui.debug);
   if (s.gameOver) drawBanner(ctx, v, s);

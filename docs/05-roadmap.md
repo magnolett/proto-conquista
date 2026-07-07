@@ -39,6 +39,14 @@ Entrega por fases; cada fase é jogável e fecha um risco. Ordem pensada pra **p
 
 **Entregue:** 93 testes (52 novos: obra, interceptação, personas, coordenação, canhão/geometria, waypoint, domínio, crescimento, atrito, **smoke de partida completa anti-stall**). **Critério de saída (pendente, humano):** cada mecânica percebida em jogo; 3+ partidas seguidas com decisões *diferentes*; dificuldades e personas distinguíveis às cegas.
 
+## F5-lite — Iteração 3: mundo grande + FFA ✅ *(2026-07-06, pedido do dono)*
+
+**Pedido:** mapa consideravelmente maior e mais inimigos (não só 1v1).
+1. **Mundo 4×** (2560×1440) com **câmera** no cliente: scroll = zoom ancorado no cursor (1×–4×), botão do MEIO arrasta, **minimapa** clicável (canto inferior-direito) com retângulo da viewport. Diais escalados: fleetSpeed 150, SUPPLY.range 720, zonas +50%, distW da IA −40%, mais neutras (14 pares no 1v1).
+2. **FFA com até 3 IAs** (menu `[E]`, padrão 3): rivais extras `e2`/`e3` com persona, doutrina e relógio próprios — **todos hostis entre si**; a IA generalizada trata QUALQUER não-aliado como alvo/ameaça. Capitais nos cantos; neutras sem espelho (posição é parte do jogo em FFA); 1v1 clássico intacto (espelho por pares). Vitória: eliminar TODOS os rivais ou dominar o centro; derrota imediata se você cair (mesmo com IAs vivas brigando). HUD com placar por rival (cores: laranja/roxo/lima) e alarmes de doutrina por IA; personas todas reveladas no placar final.
+
+Balance 1v1 no mundo novo: mediana ~2:16 (arco real), domínio passou a decidir (~1%). Anti-stall FFA coberto por teste (3 IAs fecham contra passivo).
+
 ## F4-lite — Iteração 2 de profundidade ✅ *(2026-07-06, pós-playtest: "segue simples")*
 
 **Feedback do playtest:** névoa bugada/ruim → **REMOVIDA** (corte consciente); o loop ativo do jogador ainda era pequeno (selecionar→enviar→U). Três adições que mudam a NATUREZA das decisões:

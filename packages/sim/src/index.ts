@@ -10,7 +10,13 @@ import {
   DOCTRINES,
   DOCTRINE_ORDER,
 } from '@conquista/shared';
-import type { Config, Difficulty, AIPersona, DoctrineId, Owner } from '@conquista/shared';
+import type {
+  Config,
+  Difficulty,
+  AIPersona,
+  DoctrineId,
+  ExtraEnemyId,
+} from '@conquista/shared';
 import type { GameState, Node, Inputs } from './types.js';
 import { NO_INPUTS } from './types.js';
 import { seedToState, nextRng } from './prng.js';
@@ -36,6 +42,7 @@ export type {
   UpgradeOrder,
   RouteOrder,
   DoctrineState,
+  Rival,
   Zone,
   FxEvent,
 } from './types.js';
@@ -71,6 +78,11 @@ export interface CreateOptions {
   readonly persona?: AIPersona;
   /** Doutrina do JOGADOR (F4-lite; escolhida no menu). Default 'blitz'. */
   readonly doctrineYou?: DoctrineId;
+  /**
+   * Quantidade de IAs rivais (F5-lite): 1 = 1v1 clássico espelhado (default);
+   * 2–3 = FFA com capitais nos cantos, todos hostis entre si.
+   */
+  readonly enemyCount?: 1 | 2 | 3;
 }
 
 /** Doutrina da IA pela persona: a identidade estratégica escolhe o poder. */
@@ -88,7 +100,8 @@ export function doctrineForPersona(persona: AIPersona, roll: number): DoctrineId
 export function createInitialState(seed: number, opts: CreateOptions = {}): GameState {
   const config = opts.config ?? CFG;
   const difficulty: Difficulty = opts.difficulty ?? 'normal';
-  const map = generateMap(seedToState(seed), config);
+  const enemyCount = opts.enemyCount ?? 1;
+  const map = generateMap(seedToState(seed), config, enemyCount);
   const { nodes, zones, layout } = map;
   let rng = map.rng;
   // Persona da IA (F2.5): sorteio determinístico pós-mapa; easy fica previsível.
@@ -102,6 +115,25 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
   const dRoll = nextRng(rng);
   rng = dRoll.state;
   const enemyDoctrine = doctrineForPersona(persona, dRoll.value);
+  // Rivais EXTRAS do FFA (F5-lite): persona e doutrina próprias, sorteadas.
+  const rivals: GameState['rivals'] = [];
+  const extraIds: readonly ExtraEnemyId[] = ['e2', 'e3'];
+  for (let i = 0; i < enemyCount - 1; i++) {
+    const pr = nextRng(rng);
+    rng = pr.state;
+    const rPersona =
+      difficulty === 'easy'
+        ? 'balanced'
+        : PERSONA_ORDER[Math.floor(pr.value * PERSONA_ORDER.length)]!;
+    const dr = nextRng(rng);
+    rng = dr.state;
+    rivals.push({
+      id: extraIds[i]!,
+      persona: rPersona,
+      aiTimer: 0,
+      doctrine: { id: doctrineForPersona(rPersona, dr.value), activeLeft: 0, cooldownLeft: 0 },
+    });
+  }
   return {
     nodes,
     fleets: [],
@@ -124,6 +156,7 @@ export function createInitialState(seed: number, opts: CreateOptions = {}): Game
       enemy: { id: enemyDoctrine, activeLeft: 0, cooldownLeft: 0 },
     },
     layout,
+    rivals: rivals.length > 0 ? rivals : undefined,
   };
 }
 
@@ -170,20 +203,25 @@ function applyInputs(state: GameState, inputs: Inputs): void {
   if (inputs.doctrine) activateDoctrine(state, 'you');
 }
 
-/** Verifica vitória/derrota (porte de checkWin). */
+/**
+ * Verifica vitória/derrota. FFA (F5-lite): o jogador vence quando NENHUM rival
+ * tem base/frota; perde no instante em que fica sem nada (mesmo com IAs vivas
+ * brigando entre si — a partida é SUA).
+ */
 function checkWin(state: GameState): void {
   if (state.gameOver) return;
-  const youHas =
-    state.nodes.some((n) => n.owner === 'you') || state.fleets.some((f) => f.owner === 'you');
-  const enHas =
-    state.nodes.some((n) => n.owner === 'enemy') || state.fleets.some((f) => f.owner === 'enemy');
-  if (!enHas) {
+  const alive = new Set<string>();
+  for (const n of state.nodes) if (n.owner !== 'neutral') alive.add(n.owner);
+  for (const f of state.fleets) alive.add(f.owner);
+  const youHas = alive.has('you');
+  const anyRival = alive.has('enemy') || alive.has('e2') || alive.has('e3');
+  if (!anyRival) {
     state.gameOver = true;
     state.winner = 'you';
     state.winReason = 'elimination';
   } else if (!youHas) {
     state.gameOver = true;
-    state.winner = 'enemy';
+    state.winner = 'enemy'; // p/ o banner só importa que NÃO é 'you'
     state.winReason = 'elimination';
   }
 }
@@ -217,11 +255,13 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
   state.time += dt;
 
   // 0.5) Relógios das doutrinas (F4-lite): efeito e cooldown escoam com o tempo.
-  for (const side of ['you', 'enemy'] as const) {
-    const d = state.doctrines[side];
+  const tickDoctrine = (d: { activeLeft: number; cooldownLeft: number }): void => {
     if (d.activeLeft > 0) d.activeLeft = Math.max(0, d.activeLeft - dt);
     if (d.cooldownLeft > 0) d.cooldownLeft = Math.max(0, d.cooldownLeft - dt);
-  }
+  };
+  tickDoctrine(state.doctrines.you);
+  tickDoctrine(state.doctrines.enemy);
+  for (const r of state.rivals ?? []) tickDoctrine(r.doctrine);
 
   // 1) Economia + pulse + obras (F2.5: base em obra NÃO produz; obra avança e conclui).
   //    F4-lite: doutrina 'Mobilização' multiplica a produção do lado enquanto ativa.
@@ -399,17 +439,26 @@ export function step(state: GameState, inputs: Inputs = NO_INPUTS, dt: number): 
     if (tn && tn.owner !== f.owner) tn.underAttack = true;
   }
 
-  // 4) IA por ticks. aiTick vem da dificuldade MODULADA pela persona (F2.5).
+  // 4) IAs por ticks. aiTick vem da dificuldade MODULADA pela persona (F2.5).
+  //    F5-lite: cada rival extra do FFA tem relógio e persona próprios.
   state.aiTimer -= dt;
   if (state.aiTimer <= 0) {
     state.aiTimer = effectiveAI(state.difficulty, state.persona).aiTick;
     aiThink(state);
   }
+  for (const r of state.rivals ?? []) {
+    r.aiTimer -= dt;
+    if (r.aiTimer <= 0) {
+      r.aiTimer = effectiveAI(state.difficulty, r.persona).aiTick;
+      aiThink(state, r.id, r.persona);
+    }
+  }
 
   // 4.5) DOMÍNIO do centro (F2.5): segurar a fortaleza por holdSeconds contínuos vence.
+  //      F5-lite: QUALQUER combatente (inclusive rivais extras) pode dominar.
   if (CORE.holdSeconds > 0 && !state.gameOver) {
     const core = state.nodes.find((n) => n.isCore);
-    if (core && (core.owner === 'you' || core.owner === 'enemy')) {
+    if (core && core.owner !== 'neutral') {
       if (state.coreHold.owner === core.owner) {
         state.coreHold.held += dt;
         if (state.coreHold.held >= CORE.holdSeconds) {
@@ -463,5 +512,8 @@ export function cloneState(state: GameState): GameState {
       enemy: { ...state.doctrines.enemy },
     },
     layout: state.layout,
+    rivals: state.rivals
+      ? state.rivals.map((r) => ({ ...r, doctrine: { ...r.doctrine } }))
+      : undefined,
   };
 }

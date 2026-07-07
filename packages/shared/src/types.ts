@@ -3,8 +3,17 @@
  * NÃO contém lógica nem DOM — apenas formas de dados.
  */
 
-/** Dono de uma base ou frota. */
-export type Owner = 'you' | 'enemy' | 'neutral';
+/**
+ * Dono de uma base ou frota. FFA (F5-lite): além do inimigo clássico ('enemy'),
+ * até dois rivais EXTRAS ('e2'/'e3') — todos hostis entre si e ao jogador.
+ */
+export type Owner = 'you' | 'enemy' | 'e2' | 'e3' | 'neutral';
+
+/** Donos que JOGAM (têm IA/doutrina/frotas próprias). */
+export type Combatant = Exclude<Owner, 'neutral'>;
+
+/** Ids possíveis dos rivais extras do FFA. */
+export type ExtraEnemyId = 'e2' | 'e3';
 
 /** Nível de dificuldade da IA. */
 export type Difficulty = 'easy' | 'normal' | 'hard';

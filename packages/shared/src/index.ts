@@ -1,5 +1,7 @@
 export type {
   Owner,
+  Combatant,
+  ExtraEnemyId,
   Difficulty,
   TierConfig,
   Config,

@@ -17,10 +17,14 @@ import type {
  * O protótipo single-file usava innerWidth/innerHeight; fixamos aqui p/ determinismo.
  */
 export const CFG: Config = {
-  fleetSpeed: 135,
+  // 150 (era 135): o mundo 4× maior (F5-lite) alonga as travessias; +11% de
+  // velocidade mantém o ritmo sem matar a geometria.
+  fleetSpeed: 150,
   sendDefault: 0.5,
-  worldW: 1280,
-  worldH: 720,
+  // 2560×1440 (era 1280×720): mapa "consideravelmente maior" — jogável via
+  // câmera (zoom/pan) + minimapa no cliente.
+  worldW: 2560,
+  worldH: 1440,
 };
 
 /** Tiers de base (T1, T2, T3). */
@@ -52,11 +56,12 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyConfig>> = {
     // aiTick 1.4 / upgradeChance 0.15 (eram 1.1/0.2): self-play dava hard×easy
     // ~60% — contraste de dificuldade fraco; o fácil agora pensa bem mais
     // devagar (também melhora o onboarding humano). balance-report 2026-07-06.
+    // distW reduzido ~40% (F5-lite): distâncias dobraram com o mundo 4×.
     aiTick: 1.4,
     expandThresh: 0.75,
     expandForce: 0.55,
     tierW: 35,
-    distW: 0.2,
+    distW: 0.12,
     antiPlayerW: 10,
     upgradeChance: 0.15,
   },
@@ -66,7 +71,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyConfig>> = {
     expandThresh: 0.6,
     expandForce: 0.6,
     tierW: 45,
-    distW: 0.15,
+    distW: 0.09,
     antiPlayerW: 25,
     upgradeChance: 0.35,
   },
@@ -76,7 +81,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyConfig>> = {
     expandThresh: 0.55,
     expandForce: 0.65,
     tierW: 55,
-    distW: 0.12,
+    distW: 0.07,
     antiPlayerW: 40,
     upgradeChance: 0.5,
   },
@@ -92,8 +97,9 @@ export const DIFFICULTY_ORDER: readonly Difficulty[] = ['easy', 'normal', 'hard'
 export const MAP_MODS = {
   roadSpeedMul: 1.5,
   mudSpeedMul: 0.6,
-  roadRadius: 100,
-  mudRadius: 90,
+  // raios +50% (F5-lite): zonas precisam pesar no mundo 4×.
+  roadRadius: 150,
+  mudRadius: 135,
 };
 
 /** Pesos do placar (F2): pontuação = bases*baseW + tropas + tiers*tierW. Mutável: diais. */
@@ -148,7 +154,8 @@ export const NEUTRAL = { growthRate: 0.12, growthCap: 40 };
  * Pune o deathball transcontinental; expandir por saltos vira logística.
  * attritionPerSec 0 ⇒ desligado.
  */
-export const SUPPLY = { range: 430, attritionPerSec: 0.02 };
+// range 720 (era 430): escala do mundo 4× (F5-lite) — a REGRA continua a mesma.
+export const SUPPLY = { range: 720, attritionPerSec: 0.02 };
 
 /**
  * ROUTE (F4-lite): rotas de suprimento — botão DIREITO arrastado liga base→base
@@ -201,11 +208,13 @@ export const DOCTRINES: Readonly<Record<DoctrineId, DoctrineConfig>> = {
 export const DOCTRINE_ORDER: readonly DoctrineId[] = ['blitz', 'bulwark', 'surge'];
 
 /**
- * MAPGEN (F4-lite): densidade e variedade do mapa. Mais nós = mais frentes =
+ * MAPGEN (F4/F5-lite): densidade e variedade do mapa. Mais nós = mais frentes =
  * mais decisões por minuto; o LAYOUT (sorteado por seed) muda a geometria:
  * classic (espalhado) · lanes (corredor central) · flanks (alas norte/sul).
+ * 1v1 usa PARES espelhados (neutralPairs); FFA distribui neutralsPerRival por
+ * lado sem espelho (a posição é parte do jogo num FFA).
  */
-export const MAPGEN = { neutralPairs: 7, minDist: 104 };
+export const MAPGEN = { neutralPairs: 14, neutralsPerRival: 11, minDist: 120 };
 
 /**
  * PERSONAS (F2.5): estilos de jogo da IA, sorteados por seed (easy é sempre

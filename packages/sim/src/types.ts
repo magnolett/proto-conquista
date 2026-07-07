@@ -1,5 +1,6 @@
 import type {
   Owner,
+  ExtraEnemyId,
   Difficulty,
   Config,
   BaseKind,
@@ -86,6 +87,17 @@ export interface DoctrineState {
   cooldownLeft: number;
 }
 
+/**
+ * Rival EXTRA do FFA (F5-lite): IA adicional com identidade completa própria.
+ * `rivals` ausente/vazio ⇒ 1v1 clássico (compatibilidade total).
+ */
+export interface Rival {
+  readonly id: ExtraEnemyId;
+  persona: AIPersona;
+  aiTimer: number;
+  doctrine: DoctrineState;
+}
+
 /** Zona modificadora de mapa (F2): multiplica a velocidade da frota dentro do raio. */
 export interface Zone {
   readonly x: number;
@@ -128,10 +140,12 @@ export interface GameState {
   coreHold: { owner: Owner | null; held: number };
   /** Como a partida terminou (null enquanto roda). */
   winReason: 'elimination' | 'core' | null;
-  /** Doutrinas dos dois lados (F4-lite): poder ativo com duração/cooldown. */
+  /** Doutrinas dos dois lados clássicos (F4-lite): poder ativo com duração/cooldown. */
   doctrines: { you: DoctrineState; enemy: DoctrineState };
   /** Formato do mapa sorteado por seed (informativo p/ HUD/debug). */
   layout: MapLayout;
+  /** Rivais EXTRAS do FFA (F5-lite). Ausente/vazio ⇒ 1v1 clássico. */
+  rivals?: Rival[];
 }
 
 /**

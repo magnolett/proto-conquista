@@ -1,5 +1,5 @@
 import { DIFFICULTY, PERSONAS, AI_TUNING, BASE_KINDS, SUPPLY, upgradeCost } from '@conquista/shared';
-import type { BaseKind, Difficulty, AIPersona } from '@conquista/shared';
+import type { BaseKind, Difficulty, AIPersona, Combatant } from '@conquista/shared';
 import type { GameState, Node } from './types.js';
 import {
   dist,
@@ -9,11 +9,12 @@ import {
   effectiveDmgMul,
   segmentCircleChord,
   activateDoctrine,
+  getDoctrineState,
 } from './helpers.js';
 import { nextRng } from './prng.js';
 
-/** Lado jogável pela IA (self-play usa 'you'; o jogo real usa o default 'enemy'). */
-export type AISide = 'enemy' | 'you';
+/** Lado jogável pela IA (FFA: qualquer combatente; o jogo real usa 'enemy'/'e2'/'e3'). */
+export type AISide = Combatant;
 
 /** Parâmetros EFETIVOS da IA: DIFFICULTY modulada pela persona (F2.5). */
 export interface EffectiveAI {
@@ -73,13 +74,12 @@ function targetScore(
   from: Node,
   t: Node,
   owner: AISide,
-  foe: AISide,
 ): number {
   return (
     t.tier * E.tierW -
     t.troops -
     dist(from, t) * E.distW +
-    (t.owner === foe ? E.antiPlayerW : 0) +
+    (t.owner !== 'neutral' && t.owner !== owner ? E.antiPlayerW : 0) + // qualquer RIVAL
     (t.isCore ? AI_TUNING.coreW : 0) + // o centro vale a briga (vitória por domínio)
     (t.upgrading ? AI_TUNING.buildTargetW : 0) - // punir greed: base em obra é alvo de ouro
     cannonRouteCost(state, from, t, owner) * AI_TUNING.cannonAvoidW - // rota sob canhão custa caro
@@ -156,15 +156,14 @@ export function aiThink(
   personaOverride?: AIPersona,
 ): void {
   const E = effectiveAI(state.difficulty, personaOverride ?? state.persona);
-  const foe: AISide = owner === 'enemy' ? 'you' : 'enemy';
   const nodes = state.nodes;
   const mine = nodes.filter((n) => n.owner === owner);
   if (mine.length === 0) return;
 
-  // Ameaça percebida: tropas do ADVERSÁRIO a caminho de cada base do lado.
+  // Ameaça percebida: tropas de QUALQUER rival a caminho de cada base do lado (FFA).
   const incoming: Record<number, number> = {};
   for (const f of state.fleets) {
-    if (f.owner === foe) {
+    if (f.owner !== owner && f.owner !== 'neutral') {
       const t = nodes[f.target];
       if (t && t.owner === owner) incoming[t.id] = (incoming[t.id] ?? 0) + f.count;
     }
@@ -212,7 +211,7 @@ export function aiThink(
       if (already > effDef) continue; // já será capturado pelo que está a caminho — não empilhar
       const needed = effDef - already;
       if (force <= needed + 1) continue; // só ataca o que AINDA consegue tomar
-      const score = targetScore(state, E, a, t, owner, foe);
+      const score = targetScore(state, E, a, t, owner);
       if (score > bestScore) {
         bestScore = score;
         best = t;
@@ -241,7 +240,7 @@ export function aiThink(
       const already = committed[t.id] ?? 0;
       if (already > effDef) continue;
       if (pool <= effDef - already + 1) continue; // nem juntas dá — não suicida
-      const score = targetScore(state, E, lead, t, owner, foe);
+      const score = targetScore(state, E, lead, t, owner);
       if (score > bestScore) {
         bestScore = score;
         best = t;
@@ -267,24 +266,24 @@ export function aiThink(
         (n) => n.troops >= upgradeCost(n.tier) && !((incoming[n.id] ?? 0) > 0) && !n.upgrading,
       )
       .sort((a, b) => a.tier - b.tier)[0];
-    if (safe) upgradeNode(safe, chooseUpgradeKind(state, safe, foe));
+    if (safe) upgradeNode(safe, chooseUpgradeKind(state, safe, owner));
   }
 
   // 4) DOUTRINA (F4-lite): ativa o próprio poder no momento em que ele rende —
   //    Blitz com ataque no ar, Muralha com onda hostil vindo, Mobilização em paz.
-  maybeDoctrine(state, owner, foe);
+  maybeDoctrine(state, owner);
 }
 
 /** Heurística determinística de ativação da doutrina da IA (mesma regra p/ todos). */
-function maybeDoctrine(state: GameState, owner: AISide, foe: AISide): void {
-  const d = state.doctrines[owner];
-  if (d.activeLeft > 0 || d.cooldownLeft > 0) return;
-  let inbound = 0; // tropas hostis a caminho de bases do lado
+function maybeDoctrine(state: GameState, owner: AISide): void {
+  const d = getDoctrineState(state, owner);
+  if (!d || d.activeLeft > 0 || d.cooldownLeft > 0) return;
+  let inbound = 0; // tropas de QUALQUER rival a caminho de bases do lado
   let outbound = 0; // tropas do lado em voo de ATAQUE (alvo não-aliado)
   for (const f of state.fleets) {
     const t = state.nodes[f.target];
     if (!t) continue;
-    if (f.owner === foe && t.owner === owner) inbound += f.count;
+    if (f.owner !== owner && f.owner !== 'neutral' && t.owner === owner) inbound += f.count;
     if (f.owner === owner && t.owner !== owner) outbound += f.count;
   }
   if (d.id === 'blitz' && outbound >= 25) activateDoctrine(state, owner);
@@ -295,15 +294,15 @@ function maybeDoctrine(state: GameState, owner: AISide, foe: AISide): void {
 /**
  * Especialização que a IA escolhe ao evoluir uma base (F2.5) — determinística e
  * posicional: base já especial mantém a vocação; perto do CENTRO vira canhão
- * (pressão de área na zona contestada); na FRONTEIRA com o rival vira escudo;
+ * (pressão de área na zona contestada); na FRONTEIRA com rivais vira escudo;
  * na retaguarda vira veloz (reforço chega rápido).
  */
-function chooseUpgradeKind(state: GameState, n: Node, foe: AISide): BaseKind {
+function chooseUpgradeKind(state: GameState, n: Node, owner: AISide): BaseKind {
   if (n.kind !== 'normal') return n.kind;
   const w = state.config.worldW;
   const center = { x: w / 2, y: state.config.worldH / 2 };
   if (dist(n, center) < w * 0.22) return 'cannon';
-  const foes = state.nodes.filter((m) => m.owner === foe);
+  const foes = state.nodes.filter((m) => m.owner !== 'neutral' && m.owner !== owner);
   if (foes.length === 0) return 'fast';
   let dFoe = Infinity;
   for (const m of foes) dFoe = Math.min(dFoe, dist(n, m));

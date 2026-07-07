@@ -22,27 +22,72 @@ import {
   type Difficulty,
   type DoctrineId,
 } from '@conquista/shared';
-import { computeView, toWorld, render, type View, type UiState } from './render.js';
+import { computeView, toWorld, render, minimapRect, type View, type UiState } from './render.js';
 import { ensureAudio, sfx, toggleMute, isMuted } from './audio.js';
 
-// ===== Canvas =====
+// ===== Canvas + CÂMERA (F5-lite: o mundo 4× não cabe legível numa tela) =====
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 let view: View = computeView(CFG.worldW, CFG.worldH, 1, 1);
 
+// zoom 1 = mundo inteiro (fit); scroll dá zoom ancorado no cursor; botão do
+// MEIO arrasta; clique no minimapa teleporta a câmera.
+let zoom = 1;
+let camX = CFG.worldW / 2;
+let camY = CFG.worldH / 2;
+let panDrag: { sx: number; sy: number; camX: number; camY: number } | null = null;
+
+function rebuildView(): void {
+  const base = computeView(CFG.worldW, CFG.worldH, canvas.width, canvas.height);
+  const scale = base.scale * zoom;
+  const halfW = canvas.width / 2 / scale;
+  const halfH = canvas.height / 2 / scale;
+  camX = Math.max(Math.min(camX, CFG.worldW - halfW), halfW);
+  camY = Math.max(Math.min(camY, CFG.worldH - halfH), halfH);
+  if (CFG.worldW * scale <= canvas.width) camX = CFG.worldW / 2; // letterbox: centra
+  if (CFG.worldH * scale <= canvas.height) camY = CFG.worldH / 2;
+  view = {
+    scale,
+    offsetX: canvas.width / 2 - camX * scale,
+    offsetY: canvas.height / 2 - camY * scale,
+    screenW: canvas.width,
+    screenH: canvas.height,
+  };
+}
+
 function resize(): void {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
-  view = computeView(CFG.worldW, CFG.worldH, canvas.width, canvas.height);
+  rebuildView();
 }
 window.addEventListener('resize', resize);
 resize();
 
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    if (screen !== 'playing') return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    const before = toWorld(view, mx, my);
+    zoom = Math.max(1, Math.min(4, zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    rebuildView();
+    const after = toWorld(view, mx, my);
+    camX += before.x - after.x;
+    camY += before.y - after.y;
+    rebuildView();
+  },
+  { passive: false },
+);
+
 // ===== Estado de UI (NÃO é a sim) =====
 let difficulty: Difficulty = 'normal';
 let doctrine: DoctrineId = 'blitz'; // escolhida no menu (teclas 1/2/3) — F4-lite
+let enemyCount: 1 | 2 | 3 = 3; // FFA por padrão (F5-lite); [E] no menu cicla
 let seed = (Math.random() * 0xffffffff) >>> 0; // só na inicialização; a sim não usa Math.random
-let state: GameState = createInitialState(seed, { difficulty, doctrineYou: doctrine });
+let state: GameState = createInitialState(seed, { difficulty, doctrineYou: doctrine, enemyCount });
 
 // F3 — telas: o jogo abre num MENU (o mapa da partida fica visível ao fundo,
 // congelado); clique/Espaço/Enter começa. Não há volta ao menu no meio (R basta).
@@ -178,7 +223,11 @@ let dialIndex = 0;
 
 function newMatch(newSeed: number): void {
   seed = newSeed >>> 0;
-  state = createInitialState(seed, { difficulty, doctrineYou: doctrine });
+  state = createInitialState(seed, { difficulty, doctrineYou: doctrine, enemyCount });
+  zoom = 1;
+  camX = CFG.worldW / 2;
+  camY = CFG.worldH / 2;
+  rebuildView();
   selection = new Set();
   sendRatio = CFG.sendDefault;
   paused = false;
@@ -215,7 +264,26 @@ canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) screen = 'playing'; // o clique que inicia NÃO vira arrasto
     return;
   }
+  if (e.button === 1) {
+    // botão do MEIO: arrasta a câmera (F5-lite)
+    e.preventDefault();
+    panDrag = { sx: e.clientX, sy: e.clientY, camX, camY };
+    return;
+  }
   if (state.gameOver) return;
+  // clique no MINIMAPA: teleporta a câmera (antes de qualquer seleção)
+  if (e.button === 0) {
+    const r = canvas.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    const mm = minimapRect(view);
+    if (sx >= mm.x && sx <= mm.x + mm.w && sy >= mm.y && sy <= mm.y + mm.h) {
+      camX = ((sx - mm.x) / mm.w) * CFG.worldW;
+      camY = ((sy - mm.y) / mm.h) * CFG.worldH;
+      rebuildView();
+      return;
+    }
+  }
   const p = pos(e);
   if (e.button === 2) {
     // Botão DIREITO (F4-lite): arrasto liga ROTA de suprimento a partir de base sua.
@@ -239,6 +307,12 @@ canvas.addEventListener('mousedown', (e) => {
   }
 });
 canvas.addEventListener('mousemove', (e) => {
+  if (panDrag) {
+    camX = panDrag.camX - (e.clientX - panDrag.sx) / view.scale;
+    camY = panDrag.camY - (e.clientY - panDrag.sy) / view.scale;
+    rebuildView();
+    return;
+  }
   const p = pos(e);
   mouseWorld.x = p.x;
   mouseWorld.y = p.y;
@@ -250,6 +324,10 @@ canvas.addEventListener('mousemove', (e) => {
   }
 });
 canvas.addEventListener('mouseup', (e) => {
+  if (e.button === 1) {
+    panDrag = null;
+    return;
+  }
   if (state.gameOver) {
     dragSourceId = null;
     routeDragFrom = null;
@@ -336,6 +414,10 @@ window.addEventListener('keydown', (e) => {
     } else if (e.key.toLowerCase() === 'g') {
       const i = DIFFICULTY_ORDER.indexOf(difficulty);
       difficulty = DIFFICULTY_ORDER[(i + 1) % DIFFICULTY_ORDER.length]!;
+      newMatch(seed);
+    } else if (e.key.toLowerCase() === 'e') {
+      // F5-lite: cicla a quantidade de IAs rivais (1v1 ↔ FFA)
+      enemyCount = (enemyCount === 3 ? 1 : ((enemyCount + 1) as 1 | 2 | 3));
       newMatch(seed);
     } else if (e.key.toLowerCase() === 'r') {
       newMatch((Math.random() * 0xffffffff) >>> 0);

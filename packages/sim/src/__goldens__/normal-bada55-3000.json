@@ -1,16 +1,16 @@
 {
-  "hash": "be608fae",
+  "hash": "9c4a0bfa",
   "summary": {
     "time": "50.0000",
-    "persona": "balanced",
+    "persona": "boomer",
     "winner": null,
     "winReason": null,
-    "rng": 2486554169,
+    "rng": 2309883178,
     "fleets": 0,
     "owners": {
       "you": 1,
-      "enemy": 4,
-      "neutral": 12
+      "enemy": 5,
+      "neutral": 25
     }
   }
 }

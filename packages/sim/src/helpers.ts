@@ -1,6 +1,6 @@
 import { TIERS, upgradeCost, BASE_KINDS, SCORE, UPGRADE, DOCTRINES } from '@conquista/shared';
-import type { BaseKind, Owner } from '@conquista/shared';
-import type { Node, Fleet, GameState, Zone } from './types.js';
+import type { BaseKind, Owner, Combatant } from '@conquista/shared';
+import type { Node, Fleet, GameState, Zone, DoctrineState } from './types.js';
 
 /**
  * Hipotenusa via sqrt — bit-determinística entre engines JS (IEEE-754 exige
@@ -189,21 +189,32 @@ export function finishUpgrade(n: Node): void {
   n.pulse = 1;
 }
 
+/**
+ * Estado de doutrina de um combatente (F4/F5-lite): 'you'/'enemy' vivem nos
+ * slots fixos; rivais extras do FFA ('e2'/'e3') vivem em state.rivals.
+ */
+export function getDoctrineState(state: GameState, owner: Owner): DoctrineState | undefined {
+  if (owner === 'you' || owner === 'enemy') return state.doctrines[owner];
+  if (owner === 'e2' || owner === 'e3') {
+    return state.rivals?.find((r) => r.id === owner)?.doctrine;
+  }
+  return undefined;
+}
+
 /** Multiplicador da doutrina ATIVA de um lado (F4-lite; 1 quando inativa/neutro). */
 export function doctrineMul(
   state: GameState,
   owner: Owner,
   key: 'fleetSpeedMul' | 'dmgTakenMul' | 'prodMul',
 ): number {
-  if (owner !== 'you' && owner !== 'enemy') return 1;
-  const d = state.doctrines[owner];
-  return d.activeLeft > 0 ? DOCTRINES[d.id][key] : 1;
+  const d = getDoctrineState(state, owner);
+  return d && d.activeLeft > 0 ? DOCTRINES[d.id][key] : 1;
 }
 
-/** Ativa a doutrina do lado, se pronta (input do jogador e IA — F4-lite). */
-export function activateDoctrine(state: GameState, owner: 'you' | 'enemy'): boolean {
-  const d = state.doctrines[owner];
-  if (d.activeLeft > 0 || d.cooldownLeft > 0) return false;
+/** Ativa a doutrina do lado, se pronta (input do jogador e IAs — F4/F5-lite). */
+export function activateDoctrine(state: GameState, owner: Combatant): boolean {
+  const d = getDoctrineState(state, owner);
+  if (!d || d.activeLeft > 0 || d.cooldownLeft > 0) return false;
   const cfg = DOCTRINES[d.id];
   d.activeLeft = cfg.duration;
   d.cooldownLeft = cfg.duration + cfg.cooldown; // o relógio do cooldown inclui a duração
