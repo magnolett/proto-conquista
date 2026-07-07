@@ -47,6 +47,8 @@ Entrega por fases; cada fase é jogável e fecha um risco. Ordem pensada pra **p
 
 Balance 1v1 no mundo novo: mediana ~2:16 (arco real), domínio passou a decidir (~1%). Anti-stall FFA coberto por teste (3 IAs fecham contra passivo).
 
+**Garantia (pedida pelo dono e TRAVADA em teste):** as IAs brigam ENTRE SI — hostilidade simétrica por construção (a IA só conhece *eu/neutros/rivais*), medida em 22–49 ataques e 8–19 capturas IA→IA por partida; o teste em `ffa.test.ts` quebra o CI se isso regredir. Registrado também como invariante no `CLAUDE.md`.
+
 ## F4-lite — Iteração 2 de profundidade ✅ *(2026-07-06, pós-playtest: "segue simples")*
 
 **Feedback do playtest:** névoa bugada/ruim → **REMOVIDA** (corte consciente); o loop ativo do jogador ainda era pequeno (selecionar→enviar→U). Três adições que mudam a NATUREZA das decisões:

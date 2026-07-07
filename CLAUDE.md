@@ -18,6 +18,7 @@ RTS de **conquista de território em tempo real** no estilo Galcon/Auralux/Nexus
 
 ## Regras invariantes (não violar)
 - **A sim é a verdade; a render NUNCA decide regra.** Hoje é single-player local; ao graduar (F1), a sim pura é autoritativa. *Lição herdada do project-football: bug visual ≠ bug de sim.*
+- **FFA é SIMÉTRICO: a IA não conhece "o jogador".** Para a IA existem só *eu, neutros e rivais* — agressão (`antiPlayerW`), defesa, all-in e doutrina valem para QUALQUER rival; nunca degenerar em "todas contra o humano". Trava de regressão: teste "as IAs brigam ENTRE SI" em `packages/sim/src/ffa.test.ts` (medido: 22–49 ataques e 8–19 capturas IA→IA por partida).
 - **Zero modelagem / zero asset de arte.** Beleza vem de paleta coesa + luz + forma/shader. Se precisar de "objeto", kit CC0 (Kenney), **nunca modelar** ([ADR-0002](docs/decisions/ADR-0002-arte-procedural-sem-modelagem.md)).
 - **Determinismo no alvo:** `packages/sim` sem float não-determinístico/`Math.random`/`Date.now`; PRNG injetado. Golden replay divergente = **alarme de regressão**.
 - **Balanceamento em config**, nunca hardcoded esparramado — em `packages/shared` (`CFG`/`TIERS`/`BASE_KINDS`/`MAP_MODS`/`FOG`/`SCORE`), ajustável em runtime no overlay (`O`).
