@@ -81,4 +81,40 @@ describe('FFA (F5-lite) — múltiplos rivais', () => {
     expect(s.gameOver).toBe(true); // jogador passivo não sobrevive a 3 IAs
     expect(s.winner).not.toBe('you');
   });
+
+  it('as IAs brigam ENTRE SI: envios e capturas IA→IA acontecem (trava do FFA real)', () => {
+    // Garantia pedida pelo dono: FFA não pode degenerar em "todas contra o
+    // jogador". A IA não conhece 'jogador' — só rivais; este teste TRAVA isso.
+    const AI_OWNERS = new Set<string>(['enemy', 'e2', 'e3']);
+    for (const seed of [3, 0xfeed, 99]) {
+      const s = createInitialState(seed, { difficulty: 'hard', enemyCount: 3 });
+      const seenFleets = new Set<number>();
+      let aiVsAiSends = 0;
+      let aiVsAiCaptures = 0;
+      const prevOwners = s.nodes.map((n) => n.owner);
+      for (let i = 0; i < 6 * 60 * 60 && !s.gameOver; i++) {
+        step(s, undefined, 1 / 60);
+        for (const f of s.fleets) {
+          if (seenFleets.has(f.id)) continue;
+          seenFleets.add(f.id);
+          const t = s.nodes[f.target];
+          if (t && AI_OWNERS.has(f.owner) && AI_OWNERS.has(t.owner) && t.owner !== f.owner) {
+            aiVsAiSends++;
+          }
+        }
+        for (let k = 0; k < s.nodes.length; k++) {
+          const now = s.nodes[k]!.owner;
+          const was = prevOwners[k]!;
+          if (now !== was && AI_OWNERS.has(now) && AI_OWNERS.has(was)) aiVsAiCaptures++;
+          prevOwners[k] = now;
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log(
+        `seed ${seed}: ${aiVsAiSends} ataques IA→IA · ${aiVsAiCaptures} capturas IA→IA em ${s.time.toFixed(0)}s`,
+      );
+      expect(aiVsAiSends).toBeGreaterThan(0); // IAs se atacam…
+      expect(aiVsAiSends + aiVsAiCaptures).toBeGreaterThan(5); // …e é briga, não acidente
+    }
+  });
 });
