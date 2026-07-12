@@ -109,10 +109,6 @@ describe('FFA (F5-lite) — múltiplos rivais', () => {
           prevOwners[k] = now;
         }
       }
-      // eslint-disable-next-line no-console
-      console.log(
-        `seed ${seed}: ${aiVsAiSends} ataques IA→IA · ${aiVsAiCaptures} capturas IA→IA em ${s.time.toFixed(0)}s`,
-      );
       expect(aiVsAiSends).toBeGreaterThan(0); // IAs se atacam…
       expect(aiVsAiSends + aiVsAiCaptures).toBeGreaterThan(5); // …e é briga, não acidente
     }
